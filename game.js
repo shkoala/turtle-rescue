@@ -1,560 +1,516 @@
-import { epilogue, gapsFor, notice, stages } from './quest.js';
+import { chapters, litter, notice, scenes } from './quest.js?v=adventure';
 
 const main = document.querySelector('#main');
+const route = document.querySelector('#route');
+const noticeDialog = document.querySelector('#notice');
 const teacherDialog = document.querySelector('#teacher-key');
-const storageKey = 'turtle-rescue-quest-v1';
-let screen = 'home';
+const storage = 'turtle-rescue-adventure-1';
+const portraits = new Set(['Mia', 'Leo', 'Nina', 'Alex', 'Max']);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const warmed = new Map();
 
-function newRun() {
-  return { stage: 0, part: 0, unlocked: 0, progress: {}, started: false, finished: false };
+const signDescriptions = {
+  'diversion-left': ['Yellow diversion sign with an arrow to the left', 'Diversion', 'left'],
+  'diversion-ahead': ['Yellow diversion sign with an arrow straight ahead', 'Diversion', 'ahead'],
+  'left-only': ['A white arrow pointing left on blue', '', 'left'],
+  'no-left': ['A left turn arrow crossed by a red line', '', 'bent'],
+  right: ['Beech Street is to the right', 'Beech Street', 'right'],
+  speed: ['Number 30 inside a red circle', '30'],
+  'no-entry': ['Red circle with a white horizontal bar'],
+  lights: ['Traffic lights with the top, red light on'],
+  green: ['Traffic lights with the bottom, green light on'],
+  'no-parking': ['Blue circle with a red border and red diagonal line'],
+  parking: ['White P on blue, with a plate for bus parking', 'P'],
+};
+
+const icon = (name, className = '') => '<span class="token ' + className + ' token-' + name + '" aria-hidden="true"></span>';
+
+function cleanRun() {
+  return { chapter: 0, index: 0, unlocked: 0, started: false, finished: false, supplies: false, picked: [] };
 }
 
-function loadRun() {
+function load() {
   try {
-    const stored = JSON.parse(localStorage.getItem(storageKey));
-    if (stored?.progress && stages[stored.stage]?.parts[stored.part] && stages[stored.unlocked]) {
-      return stored;
+    const saved = JSON.parse(localStorage.getItem(storage));
+    if (saved && chapters[saved.chapter]?.steps[saved.index] && chapters[saved.unlocked] && Array.isArray(saved.picked)) {
+      return saved;
     }
   } catch {
-    // The quest also works when local storage is unavailable.
+    // Start a new run if saved data cannot be read.
   }
-  return newRun();
+  return cleanRun();
 }
 
-let run = loadRun();
+let run = load();
+let screen = 'cover';
+let renderedShot = '';
+let pending = 0;
+let locked = false;
+let target = null;
+let motion = !reducedMotion.matches;
 
 function save() {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(run));
+    localStorage.setItem(storage, JSON.stringify(run));
   } catch {
-    // Keep this session playable in private browsers.
+    // The game still runs for the current session.
   }
 }
 
-function escape(value) {
-  const element = document.createElement('span');
-  element.textContent = String(value);
-  return element.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+function escape(text) {
+  return String(text).replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
 }
 
-function current() {
-  const stage = stages[run.stage];
-  const part = stage.parts[run.part];
-  const progress = run.progress[part.id] ??= {
-    gaps: {}, choices: {}, order: [], reading: 0, readingChecked: false, planConfirmed: false, done: false,
-  };
-  return { stage, part, progress };
+function asset(name, extra = '') {
+  return '<img src="./assets/' + name + '.webp" alt="" ' + extra + '>';
 }
 
-function stageComplete(stage) {
-  return stage.parts.every(part => run.progress[part.id]?.done);
+function warm(name) {
+  if (warmed.has(name)) return;
+  const picture = new Image();
+  picture.decoding = 'async';
+  picture.src = './assets/' + name + '.webp';
+  warmed.set(name, picture);
 }
 
-function openPart(stageIndex, partIndex = 0, section = 'scene') {
-  run.stage = stageIndex;
-  run.part = partIndex;
-  run.started = true;
+function warmUpcoming() {
+  const beats = chapters[run.chapter].steps.slice(run.index, run.index + 4);
+  if (beats.length < 4 && chapters[run.chapter + 1]) beats.push(chapters[run.chapter + 1].steps[0]);
+  for (const beat of beats) {
+    const scene = scenes[beat.scene];
+    warm(scene.art);
+    scene.cast.forEach(person => warm('actor-' + person.toLowerCase()));
+    if (scene.vehicle || beat.vehicle) {
+      warm('bus');
+      warm('wheel');
+    }
+    if (beat.effect === 'hatch') warm('turtle-walk');
+  }
+}
+
+function button(label, action, className = 'primary', extra = '') {
+  return '<button type="button" class="' + className + '" data-action="' + action + '" ' + extra + '>' + escape(label) + '</button>';
+}
+
+function currentBeat() {
+  return target ? target.item.prompts[target.index] : chapters[run.chapter].steps[run.index];
+}
+
+function showRoute() {
+  if (screen === 'cover' || screen === 'ending') {
+    route.innerHTML = '';
+    return;
+  }
+  route.innerHTML = '<ol aria-label="Quest route">' + chapters.map((chapter, index) => {
+    const label = '<span class="route-dot">' + (index < run.unlocked ? '✓' : index + 1) + '</span><span class="route-name">' + chapter.name + '</span>';
+    const description = (index + 1) + '. ' + chapter.name;
+    const current = index === run.chapter ? ' aria-current="step"' : '';
+    const control = index <= run.unlocked
+      ? '<button type="button" data-action="chapter" data-value="' + index + '" aria-label="' + description + '"' + current + '>' + label + '</button>'
+      : '<span class="route-locked" aria-label="' + description + '">' + label + '</span>';
+    return '<li>' + control + '</li>';
+  }).join('') + '</ol>';
+  const active = route.querySelector('[aria-current]');
+  const list = route.querySelector('ol');
+  if (active && list.scrollWidth > list.clientWidth) {
+    list.scrollLeft = active.closest('li').offsetLeft - (list.clientWidth - active.clientWidth) / 2;
+  }
+}
+
+function world(beat, scene) {
+  const vehicle = beat.vehicle ?? scene.vehicle;
+  const characters = scene.cast.map(person =>
+    asset('actor-' + person.toLowerCase(), 'class="actor actor-' + person.toLowerCase() + '"')
+  ).join('');
+  const riders = vehicle && vehicle !== 'parked' ? ['mia', 'leo'].map(person =>
+    '<span class="rider rider-' + person + '">' + asset('actor-' + person) + '</span>').join('') : '';
+  const bus = vehicle ? '<div class="vehicle vehicle-' + vehicle + '"><div class="vehicle-body">'
+    + asset('bus', 'class="bus-art"')
+    + riders
+    + '<span class="bus-tyre tyre-back"></span><span class="bus-tyre tyre-front"></span>'
+    + '</div><span class="dust"></span></div>' : '';
+  const burst = beat.effect === 'burst' ? '<span class="burst-call">POP!</span>' : '';
+  const hatch = beat.effect === 'hatch' ? '<div class="hatch-track">' + [1, 2, 3].map(index =>
+    asset('turtle-walk', 'class="hatchling hatchling-' + index + '"')).join('') + '</div>' : '';
+  const backdrop = vehicle === 'moving'
+    ? '<div class="road-track">' + asset(scene.art, 'class="road-tile"') + asset(scene.art, 'class="road-tile"') + '</div>'
+    : asset(scene.art, 'class="landscape"');
+  return '<div class="world-back" aria-hidden="true">' + backdrop
+    + '<div class="scene-light"></div>' + (vehicle ? '<div class="speed-lines"></div>' : '')
+    + characters + bus + burst + hatch + '</div>';
+}
+
+function portrait(name) {
+  return portraits.has(name)
+    ? asset(name.toLowerCase(), 'class="portrait"')
+    : '<span class="portrait portrait-letter" aria-hidden="true">' + (name === 'Traffic warden' ? 'W' : name[0]) + '</span>';
+}
+
+function title(beat, scene) {
+  const caption = '<span class="scene-time">' + escape(beat.time ?? scene.time) + '</span>'
+    + '<h1 tabindex="-1" id="location-title">' + escape(scene.place) + '</h1>';
+  return '<div class="location">' + caption + '</div>'
+    + (run.supplies && run.chapter >= 4 ? '<span class="kit">' + icon('supplies') + 'Gloves &amp; bags</span>' : '');
+}
+
+function propSign(sign) {
+  const [description, word, direction] = signDescriptions[sign];
+  return '<div class="road-prop" role="img" aria-label="' + escape(description) + '"><div class="sign sign-' + sign + '">'
+    + (word ? '<span>' + word + '</span>' : '')
+    + (direction ? '<i class="arrow arrow-' + direction + '"></i>' : '')
+    + (sign === 'lights' || sign === 'green' ? '<i></i><i></i><i></i>' : '')
+    + (sign === 'parking' ? '<small>Bus parking</small>' : '')
+    + '</div></div>';
+}
+
+function hotspot(marker, index, mode, visited = false) {
+  const label = marker.label;
+  return '<button type="button" class="hotspot' + (visited ? ' visited' : '') + '" data-action="' + mode
+    + '" data-value="' + index + '" style="--x:' + marker.x + '%;--y:' + marker.y + '%"'
+    + (visited ? ' disabled' : '') + '><span class="hotspot-pin">'
+    + (marker.kind ? icon(marker.kind) : '<i></i>') + '</span><span class="hotspot-name">'
+    + escape(label) + '</span></button>';
+}
+
+function sceneObjects(beat) {
+  if (beat.sign) return propSign(beat.sign);
+  if (beat.type === 'find') {
+    return '<div class="hotspots">' + beat.spots.map((marker, index) =>
+      hotspot(marker, index, 'spot', beat.visited?.includes(index))).join('') + '</div>';
+  }
+  if (beat.scene === 'cleanup') {
+    return '<div class="hotspots">' + litter.map((item, index) => {
+      if (run.picked.includes(item.id)) return '';
+      if (beat.type === 'search') return hotspot(item.spot, index, 'investigate');
+      return '<div class="loose-litter" aria-hidden="true" style="--x:' + item.spot.x + '%;--y:' + item.spot.y + '%">'
+        + icon(item.spot.kind) + '</div>';
+    }).join('') + '</div>';
+  }
+  return '';
+}
+
+function formattedLine(text, answer) {
+  return escape(text).replace('{}', answer
+    ? '<strong class="word-filled">' + escape(answer) + '</strong>'
+    : '<span class="word-gap" aria-label="blank">…</span>');
+}
+
+function noticePaper() {
+  return '<article class="paper"><h2>Help us clean Turtle Beach!</h2>' + notice.map(p => '<p>' + p + '</p>').join('') + '</article>';
+}
+
+function chatHistory() {
+  const messages = chapters[1].steps.slice(0, run.index).filter(item => !item.routes);
+  if (!messages.length) return '';
+  return '<div class="chat-history" aria-label="Earlier messages">' + messages.map(item =>
+    '<div class="chat-entry">' + portrait(item.speaker) + '<p><strong>' + escape(item.speaker)
+    + '</strong>' + formattedLine(item.text, item.options?.[item.answer]) + '</p></div>').join('') + '</div>';
+}
+
+function routeCards(beat) {
+  if (beat.routes === 'cafe') {
+    return '<div class="route-cards"><p><strong>Leave Pine Café</strong>9.46 a.m.</p><p><strong>Meet the ranger</strong>10 a.m.</p></div>';
+  }
+  return '<div class="route-cards"><p><strong>Walk from the station</strong>9.25 a.m. · 45 minutes</p>'
+    + '<p><strong>Volunteer bus</strong>9.30 a.m. · About 20 minutes with the café stop</p></div>';
+}
+
+function markerChoices(beat) {
+  const markers = beat.type === 'search' ? litter.map(item => item.spot) : beat.spots;
+  return '<div class="spot-shortcuts">' + markers.map((item, index) => {
+    const used = beat.type === 'search' ? run.picked.includes(litter[index].id) : beat.visited?.includes(index);
+    const action = beat.type === 'search' ? 'investigate' : 'spot';
+    return button(item.label, action, 'choice-button' + (used ? ' is-correct' : ''),
+      'data-value="' + index + '"' + (used ? ' disabled' : ''));
+  }).join('') + '</div>';
+}
+
+function renderConsole(beat) {
+  let action = '';
+  if (beat.type === 'pick') {
+    const compact = beat.options.every(option => option.length <= 20);
+    action = (beat.routes ? routeCards(beat) : '') + '<div class="choices' + (compact ? ' choices-short' : '') + '" aria-label="Choose your reply">'
+      + beat.options.map((reply, index) => button(reply, 'answer', 'choice-button', 'data-value="' + index + '"')).join('') + '</div>';
+  } else if (beat.type === 'find' || beat.type === 'search') {
+    action = markerChoices(beat);
+    if (beat.type === 'search') {
+      action += '<ul class="collect-status">' + litter.map(item =>
+        '<li class="' + (run.picked.includes(item.id) ? 'found' : '') + '">' + escape(item.done) + '</li>').join('') + '</ul>';
+    }
+  } else {
+    action = button(beat.next, 'next', 'primary' + (beat.type === 'clip' ? ' play-next' : ''));
+    if (beat.effect === 'burst' || beat.effect === 'hatch') {
+      action = '<div class="clip-controls">' + action + button('Replay', 'replay', 'text-button replay') + '</div>';
+    }
+  }
+  const chat = beat.scene === 'phone';
+  return (chat ? '<header class="phone-head"><strong>Pebble Bay volunteers</strong><span>Friday evening</span></header>' + chatHistory() : '')
+    + '<div class="speech">'
+    + '<div class="speaker">' + portrait(beat.speaker) + '<strong>' + escape(beat.speaker) + '</strong>'
+    + (target ? button('Back to the beach', 'cancel-search', 'text-button') : '') + '</div>'
+    + '<p class="spoken" id="spoken" tabindex="-1">' + formattedLine(beat.text) + '</p>'
+    + (beat.reading ? button('See the notice', 'notice', 'text-button see-notice') : '')
+    + '<p class="feedback" id="feedback" role="status"></p>'
+    + action + '</div>';
+}
+
+function play() {
+  warmUpcoming();
+  const beat = currentBeat();
+  const scene = scenes[beat.scene];
+  const shot = [beat.scene, beat.effect ?? '', beat.vehicle ?? ''].join('/');
+  const changed = shot !== renderedShot;
+  if (changed) {
+    main.innerHTML = '<section class="game-stage" id="stage"><div class="view" id="view">'
+      + world(beat, scene) + '<div id="scene-ui"></div></div><div id="notice-panel"></div>'
+      + '<div class="console" id="console"></div></section>';
+    renderedShot = shot;
+  }
+  const stage = main.querySelector('#stage');
+  stage.className = 'game-stage scene-' + beat.scene + (beat.notice ? ' notice-open' : '')
+    + (beat.effect ? ' effect-' + beat.effect : '') + (scene.vehicle === 'moving' ? ' moving' : '')
+    + (beat.visited ? ' crossing-' + beat.visited.length : '')
+    + (target ? ' searching-' + target.item.id : '');
+  main.querySelector('#scene-ui').innerHTML = title(beat, scene) + sceneObjects(beat);
+  main.querySelector('#notice-panel').innerHTML = beat.notice ? noticePaper() : '';
+  const consolePanel = main.querySelector('#console');
+  consolePanel.className = 'console' + (beat.scene === 'phone' ? ' phone' : '');
+  consolePanel.innerHTML = renderConsole(beat);
+  const history = consolePanel.querySelector('.chat-history');
+  if (history) history.scrollTop = history.scrollHeight;
+  const activeActor = main.querySelector('.actor-' + escape(beat.speaker).toLowerCase().split(' ')[0]);
+  main.querySelectorAll('.actor').forEach(actor => actor.classList.toggle('speaking', activeActor === actor));
+  if (beat.type === 'clip' && motion) {
+    const next = consolePanel.querySelector('.play-next');
+    next.setAttribute('disabled', '');
+    pending = window.setTimeout(() => {
+      next.removeAttribute('disabled');
+      pending = 0;
+    }, beat.duration);
+  }
+  return changed;
+}
+
+function cover() {
+  const label = run.finished ? 'See the ending' : run.started ? 'Continue the quest' : 'Start the quest';
+  main.innerHTML = '<section class="front-cover">'
+    + asset('turtle', 'class="cover-art"') + '<div class="cover-copy">'
+    + '<p class="eyebrow">English adventure · A2–A2+</p><h1 tabindex="-1">Turtle<br>Rescue</h1>'
+    + '<p>A storm has left plastic all over Turtle Beach. Help Mia and Leo find their way to the coast and protect the turtle nests.</p>'
+    + button(label, run.finished ? 'ending' : 'start')
+    + '</div></section>';
+}
+
+function ending() {
+  main.innerHTML = '<section class="front-cover end-cover">'
+    + asset('hatchlings', 'class="cover-art"') + '<div class="cover-copy">'
+    + '<p class="eyebrow">Saturday evening · Turtle Beach</p><h1 tabindex="-1">They made it<br>to the sea!</h1>'
+    + '<p>The volunteers cleared the beach and kept the turtle nests safe. That evening, the ranger saw tiny turtles heading for the waves.</p>'
+    + '<div class="ending-actions">' + button('Review the quest', 'review')
+    + button('Play again', 'restart', 'secondary') + '</div></div></section>';
+}
+
+function render(focus = false) {
+  locked = false;
+  window.clearTimeout(pending);
+  pending = 0;
+  showRoute();
+  if (screen === 'quest') {
+    const changed = play();
+    if (focus) {
+      if (changed) window.scrollTo({ top: 0 });
+      const speech = main.querySelector('#spoken');
+      speech.focus({ preventScroll: true });
+      if (!changed && speech.getBoundingClientRect().top < 70) speech.scrollIntoView({ block: 'nearest' });
+    }
+  } else {
+    renderedShot = '';
+    if (screen === 'cover') cover();
+    else ending();
+    if (focus) {
+      window.scrollTo({ top: 0 });
+      main.querySelector('h1').focus({ preventScroll: true });
+    }
+  }
+}
+
+function report(text, ok = false) {
+  const feedback = main.querySelector('#feedback');
+  if (!feedback) return;
+  feedback.textContent = text;
+  feedback.className = 'feedback ' + (ok ? 'success' : 'hint');
+}
+
+function advance() {
+  if (target) {
+    target.index++;
+    if (target.index >= target.item.prompts.length) {
+      if (!run.picked.includes(target.item.id)) run.picked.push(target.item.id);
+      target = null;
+      if (run.picked.length === litter.length) run.index++;
+    }
+  } else {
+    const beat = currentBeat();
+    if (beat.award === 'supplies') run.supplies = true;
+    const chapter = chapters[run.chapter];
+    if (run.index + 1 < chapter.steps.length) {
+      run.index++;
+    } else if (run.chapter + 1 < chapters.length) {
+      run.chapter++;
+      run.unlocked = Math.max(run.chapter, run.unlocked);
+      run.index = 0;
+    } else {
+      run.finished = true;
+      screen = 'ending';
+    }
+  }
+  save();
+  render(true);
+}
+
+function choose(control, value, map = false) {
+  if (locked) return;
+  const beat = currentBeat();
+  if (value !== beat.answer) {
+    main.querySelectorAll('.is-wrong').forEach(node => node.classList.remove('is-wrong'));
+    control.classList.add('is-wrong');
+    report(beat.hint);
+    return;
+  }
+  locked = true;
+  control.classList.remove('is-wrong');
+  control.classList.add('is-correct');
+  if (!map && beat.text.includes('{}')) {
+    main.querySelector('#spoken').innerHTML = formattedLine(beat.text, beat.options[value]);
+  }
+  if (beat.routes === true) report('The bus gets you there around 9.50. The ranger is waiting at ten.', true);
+  else if (beat.routes) report('You’ll reach the centre at about 9.54.', true);
+  else if (beat.scene === 'ride') stageTurn(beat.sign);
+  pending = window.setTimeout(advance, !motion ? 160 : beat.routes ? 970 : beat.sign === 'lights' ? 870 : 540);
+}
+
+function stageTurn(sign) {
+  const stage = main.querySelector('#stage');
+  stage.classList.add(sign === 'lights' ? 'braking' : 'drive-on');
+}
+
+function navigateChapter(index) {
+  if (index > run.unlocked || !chapters[index]) return;
+  target = null;
+  run.chapter = index;
+  run.index = 0;
+  run.picked = [];
+  run.supplies = index > 4;
   screen = 'quest';
   save();
-  render(section);
+  render(true);
 }
 
-function route(onHome = false) {
-  return `<nav class="route${onHome ? ' route-home' : ''}" aria-label="Quest route">
-    ${onHome ? '<h2>Your route</h2>' : ''}
-    <ol>${stages.map((stage, index) => {
-      const active = screen === 'quest' && run.stage === index;
-      const complete = stageComplete(stage);
-      const state = complete ? ' complete' : '';
-      const label = `<span class="stop-number">${complete ? '✓' : index + 1}</span><span class="stop-title">${stage.label}</span>`;
-      if (!onHome && index <= run.unlocked) {
-        return `<li class="${state}"><button type="button" data-action="scene" data-index="${index}" ${active ? 'aria-current="step"' : ''}>${label}</button></li>`;
-      }
-      return `<li class="unopened${state}"><span>${label}</span></li>`;
-    }).join('')}</ol>
-  </nav>`;
+function updateMotion(active) {
+  motion = active;
+  document.body.classList.toggle('motion-off', !motion);
+  const control = document.querySelector('[data-action="motion"]');
+  control.textContent = motion ? 'Pause motion' : 'Play motion';
+  control.setAttribute('aria-pressed', String(!motion));
+  if (!motion) main.querySelector('.play-next')?.removeAttribute('disabled');
 }
 
-function imageTag(name, alt, className = '') {
-  return `<img class="${className}" src="./assets/${name}.webp" alt="${escape(alt)}" decoding="async">`;
+function fillKey() {
+  const notes = [
+    'Learners can reopen the notice during the quest.',
+    'Walking from the station would take until 10.10. The 9.30 bus was due at the centre at about 9.50.',
+    'Take the diversion, go straight at the first lights, then turn left into Station Road at the lights after the supermarket.',
+    'Board at the station, read the signs and stop safely near Pine Café when the tyre bursts.',
+    'Collect the gloves and bags. Walk from the café with the adults at 9.46 and reach the centre at about 9.54.',
+    'Pavement, zebra crossing, rescue centre, then the path to the beach. Send the bus driver the parking information.',
+    'Pick up the bottle with gloves on. Tell the ranger about the bag behind the rope.',
+  ];
+  document.querySelector('#teacher-content').innerHTML = '<p>British English · A2–A2+. Ask learners to say each answer aloud before clicking, especially in the dialogues and at the road signs.</p>'
+    + chapters.map((chapter, index) => {
+      const steps = chapter.steps.flatMap(beat => beat.type === 'search' ? litter.flatMap(item => item.prompts) : [beat]);
+      const entries = steps.filter(beat => beat.type === 'pick' || beat.type === 'find').map(beat => {
+        const answer = beat.options?.[beat.answer] ?? beat.spots[beat.answer].label;
+        const response = beat.text.includes('{}') ? beat.text.replace('{}', answer) : answer;
+        return '<li>' + escape(response) + '</li>';
+      }).join('');
+      return '<details><summary>' + escape(chapter.name) + '</summary><p>' + escape(notes[index]) + '</p><ol>' + entries + '</ol></details>';
+    }).join('');
 }
-
-function renderHome() {
-  const action = run.finished ? 'ending' : 'start';
-  const label = run.finished ? 'View the ending' : run.started ? 'Continue the quest' : 'Start the quest';
-  return `<section class="cover" aria-labelledby="cover-title">
-    ${imageTag('turtle', 'A sea turtle swims through sunlit turquoise water.', 'cover-art')}
-    <div class="cover-content">
-      <p class="cover-kicker">English quest · A2–A2+</p>
-      <h1 id="cover-title">Turtle<br>Rescue</h1>
-      <p class="cover-intro">A storm has left plastic all over Turtle Beach. Guide the volunteers to the rescue centre and help protect the turtle nests.</p>
-      <button class="primary cover-button" type="button" data-action="${action}">${label}</button>
-    </div>
-  </section>
-  ${route(true)}`;
-}
-
-function renderQuest() {
-  const { stage, part, progress } = current();
-  return `${route()}
-    <section class="scene-banner scene-${stage.id}" aria-labelledby="scene-title">
-      <div class="scene-copy">
-        <p class="scene-time">${stage.when}</p>
-        <h1 id="scene-title" tabindex="-1">${stage.title}</h1>
-      </div>
-      ${imageTag(part.art ?? stage.art, part.alt ?? stage.alt, 'scene-art')}
-    </section>
-    <section class="activity activity-${part.type}" aria-labelledby="activity-title">
-      ${renderActivity(part, progress)}
-    </section>`;
-}
-
-function renderEnding() {
-  return `<section class="ending" aria-labelledby="ending-title">
-    ${imageTag(epilogue.art, epilogue.alt, 'ending-art')}
-    <div class="ending-copy">
-      <p class="eyebrow">${epilogue.when}</p>
-      <h1 id="ending-title" tabindex="-1">${epilogue.title}</h1>
-      <p>${epilogue.text}</p>
-      <div class="chat-row ending-message">
-        ${avatar('Mia')}
-        <p class="bubble"><strong>Mia</strong> ${epilogue.message}</p>
-      </div>
-      <div class="ending-actions">
-        <button type="button" class="primary" data-action="review">Review the quest</button>
-        <button type="button" class="secondary" data-action="restart">Play again</button>
-      </div>
-    </div>
-  </section>`;
-}
-
-function render(section) {
-  main.innerHTML = screen === 'home' ? renderHome() : screen === 'ending' ? renderEnding() : renderQuest();
-  const selectedStop = main.querySelector('.route [aria-current="step"]');
-  if (selectedStop) {
-    const list = selectedStop.closest('ol');
-    if (list.scrollWidth > list.clientWidth) {
-      list.scrollLeft = selectedStop.closest('li').offsetLeft - (list.clientWidth - selectedStop.clientWidth) / 2;
-    }
-  }
-  if (section) {
-    const target = main.querySelector(section === 'activity' ? '#activity-title' : 'h1');
-    target?.focus({ preventScroll: true });
-    if (section === 'activity') target?.scrollIntoView({ block: 'start' });
-    else window.scrollTo({ top: 0 });
-  }
-}
-
-function avatar(person) {
-  const names = ['Mia', 'Nina', 'Max', 'Leo', 'Alex'];
-  if (!names.includes(person)) {
-    return `<span class="avatar avatar-initial" aria-hidden="true">${person === 'Traffic warden' ? 'W' : 'M'}</span>`;
-  }
-  return `<img class="avatar" src="./assets/${person.toLowerCase()}.webp" width="44" height="44" alt="">`;
-}
-
-function selectField(field, index, progress) {
-  const selected = progress.gaps[index];
-  const wide = field.options.some(option => option.length > 30);
-  const label = 'Complete ' + field.text.replace('{}', 'the blank');
-  return `<select class="gap${wide ? ' gap-wide' : ''}" data-gap="${index}" aria-label="${escape(label)}" ${progress.done ? 'disabled' : ''}>
-    <option value="" ${selected ? '' : 'selected'} disabled>${wide ? 'Choose a question' : '…'}</option>
-    ${field.options.map(option => `<option value="${escape(option)}"${option === selected ? ' selected' : ''}>${escape(option)}</option>`).join('')}
-  </select>`;
-}
-
-function gapLine(field, index, progress) {
-  return `<p class="gap-line">${escape(field.text).replace('{}', selectField(field, index, progress))}</p>`;
-}
-
-function chatRows(messages, part, progress, dialogue = false) {
-  return `<div class="thread${dialogue ? ' dialogue' : ''}">
-    ${messages.map(message => {
-      const content = escape(message.text).replace(/\{(\d+)\}/g, (_, index) => selectField(part.gaps[index], index, progress));
-      return `<div class="chat-row ${message.person === 'Mia' || message.person === 'Mum' ? ' chat-lead' : ''}">
-        ${avatar(message.person)}
-        <p class="bubble"><strong>${escape(message.person)}</strong> ${content}</p>
-      </div>`;
-    }).join('')}
-  </div>`;
-}
-
-function choices(questions, progress, startIndex = 0, locked = false) {
-  return `<div class="choice-list">${questions.map((item, index) => {
-    const id = startIndex + index;
-    const selected = progress.choices[id];
-    return `<fieldset class="choice-set" data-question="${id}">
-      <legend>${escape(item.text)}</legend>
-      ${item.options.map((option, ix) => `<label class="option">
-        <input type="radio" name="choice-${id}" value="${ix}" data-choice="${id}" ${selected === ix ? 'checked' : ''} ${locked ? 'disabled' : ''}>
-        <span>${escape(option)}</span>
-      </label>`).join('')}
-    </fieldset>`;
-  }).join('')}</div>`;
-}
-
-function noticeReading(part, progress) {
-  const index = progress.reading;
-  const ready = progress.readingChecked || progress.done;
-  return `<div class="reading-layout">
-    <article class="notice-paper">
-      <h2>Help us clean Turtle Beach!</h2>
-      ${notice.map(paragraph => `<p>${paragraph}</p>`).join('')}
-    </article>
-    <div class="reading-question">
-      <h2 id="activity-title" tabindex="-1">${part.title}</h2>
-      <div class="question-count" aria-label="Question ${index + 1} of ${part.questions.length}">
-        ${part.questions.map((_, item) => `<span class="${item < index || (item === index && ready) ? 'answered' : item === index ? 'current' : ''}" aria-hidden="true"></span>`).join('')}
-      </div>
-      <p class="count-label">Question ${index + 1} of ${part.questions.length}</p>
-      ${choices([part.questions[index]], progress, index, ready)}
-      ${activityEnd(part, progress)}
-    </div>
-  </div>`;
-}
-
-function activityHeader(part) {
-  return `<header class="activity-heading">
-    <h2 tabindex="-1" id="activity-title">${part.title}</h2>
-    ${part.intro ? `<p>${escape(part.intro)}</p>` : ''}
-  </header>`;
-}
-
-function activityEnd(part, progress) {
-  let button = 'Check answers';
-  let action = 'check';
-  let feedback = '';
-  if (progress.done) {
-    action = 'next';
-    const stage = stages[run.stage];
-    if (run.part + 1 < stage.parts.length) button = 'Continue';
-    else if (run.stage + 1 < stages.length) button = 'Next: ' + stages[run.stage + 1].label;
-    else button = 'See the ending';
-    feedback = part.done || 'Well done.';
-  } else if (part.type === 'reading' && progress.readingChecked) {
-    button = 'Next question';
-    action = 'next-question';
-    feedback = 'Correct.';
-  } else if (part.type === 'reading') {
-    button = 'Check answer';
-  } else if (part.type === 'plan' && !progress.planConfirmed) {
-    button = 'Send the message';
-  }
-  return `<div class="activity-end">
-    <p class="feedback${feedback ? ' positive' : ''}" id="feedback" role="status">${escape(feedback)}</p>
-    ${progress.done && part.say ? `<p class="say">${escape(part.say)}</p>` : ''}
-    <button class="primary" type="button" data-action="${action}">${escape(button)}</button>
-  </div>`;
-}
-
-function plan(part, progress) {
-  return `<div class="plan-options">${part.routes.map(item => `<section class="plan-option">
-    <h3>${escape(item.name)}</h3><p>${escape(item.detail)}</p>
-  </section>`).join('')}</div>
-  ${choices(part.questions, progress, 0, progress.planConfirmed || progress.done)}
-  ${progress.planConfirmed ? '<p class="reply-instruction">Complete Nina’s reply with by, on or in.</p>' + chatRows(part.messages, part, progress) : ''}`;
-}
-
-const signs = {
-  'diversion-left': { label: 'Yellow diversion sign with an arrow to the left', word: 'Diversion', arrow: 'left' },
-  'diversion-ahead': { label: 'Yellow diversion sign with an arrow straight ahead', word: 'Diversion', arrow: 'ahead' },
-  'no-left': { label: 'A black left turn arrow crossed by a red line in a red circle', arrow: 'left' },
-  'no-entry': { label: 'Red circle with a white horizontal bar' },
-  'speed': { label: 'Number 30 inside a red circle', word: '30' },
-  'lights': { label: 'The top, red traffic light is lit' },
-  'left-only': { label: 'A white arrow pointing left on a blue circle', arrow: 'left' },
-  'no-parking': { label: 'Blue circle with a red border and red diagonal line' },
-  'parking': { label: 'White P on a blue square, with a bus parking plate', word: 'P' },
-};
-
-function signImage(code) {
-  const sign = signs[code];
-  return `<div class="sign-icon sign-${code}" role="img" aria-label="${sign.label}">
-    ${sign.word ? `<span class="sign-word">${sign.word}</span>` : ''}
-    ${sign.arrow ? `<span class="sign-arrow arrow-${sign.arrow}"></span>` : ''}
-    ${code === 'lights' ? '<span></span><span></span><span></span>' : ''}
-    ${code === 'parking' ? '<small>Bus parking</small>' : ''}
-  </div>`;
-}
-
-function signCards(part, progress) {
-  let index = 0;
-  return `<div class="sign-grid">${part.signs.map(sign => `<section class="sign-card">
-    <div class="sign-picture">
-      ${signImage(sign.code)}
-      ${sign.code === 'no-left' ? '<div class="street-plate">Beech Street <span aria-hidden="true">→</span></div>' : ''}
-    </div>
-    <div class="sign-content">
-      <h3>${escape(sign.context)}</h3>
-      ${sign.gaps.map(field => gapLine(field, index++, progress)).join('')}
-    </div>
-  </section>`).join('')}</div>`;
-}
-
-function pairCards(part) {
-  return `<p class="pair-instruction">Work in pairs. Take a role and practise the conversation. Open the phrases if you need help.</p>
-  <div class="pair-grid">${part.roles.map(role => `<section class="role-card">
-    <h3>${escape(role.name)}</h3>
-    <p>${escape(role.brief)}</p>
-    <details><summary>Useful phrases</summary><ul>
-      ${role.lines.map(line => `<li>${escape(line)}</li>`).join('')}
-    </ul></details>
-  </section>`).join('')}</div>`;
-}
-
-function orderTask(part, progress) {
-  return `<div class="order-layout" id="order-task">
-    <div class="order-bank"><h3>Actions</h3>${part.items.map(item => {
-      const used = progress.order.includes(item.letter);
-      return `<button class="order-card" type="button" data-action="order-add" data-letter="${item.letter}" ${used || progress.done ? 'disabled' : ''}>
-        <span class="order-letter">${item.letter}</span><span>${escape(item.text)}</span>
-      </button>`;
-    }).join('')}</div>
-    <div class="order-answer"><h3>Your route</h3>
-      ${progress.order.length ? `<ol>${progress.order.map(letter => {
-        const item = part.items.find(action => action.letter === letter);
-        return `<li><span>${escape(item.text)}</span>${progress.done ? '' : `<button type="button" class="remove-step" data-action="order-remove" data-letter="${letter}" aria-label="Remove action ${letter}">×</button>`}</li>`;
-      }).join('')}</ol>` : '<p class="order-empty">Tap the first action.</p>'}
-    </div>
-  </div>`;
-}
-
-function renderActivity(part, progress) {
-  if (part.type === 'reading') return noticeReading(part, progress);
-  let body;
-  switch (part.type) {
-    case 'chat':
-      body = chatRows(part.messages, part, progress);
-      break;
-    case 'plan':
-      body = plan(part, progress);
-      break;
-    case 'dialogue':
-      body = chatRows(part.dialogues, part, progress, true);
-      break;
-    case 'gaps':
-      body = `<div class="gaps">${part.gaps.map((field, index) => gapLine(field, index, progress)).join('')}</div>`;
-      break;
-    case 'signs':
-      body = signCards(part, progress);
-      break;
-    case 'pair':
-      body = pairCards(part) + choices(part.questions, progress, 0, progress.done);
-      break;
-    case 'order':
-      body = orderTask(part, progress);
-      break;
-    case 'briefing': {
-      let index = 0;
-      body = `<div class="briefing-grid">${part.groups.map(group => `<section class="briefing-card">
-        <h3>${group.title}</h3><p class="modal-pair">${group.words}</p>
-        ${group.gaps.map(field => gapLine(field, index++, progress)).join('')}
-      </section>`).join('')}</div>`;
-      break;
-    }
-    default:
-      body = choices(part.questions, progress, 0, progress.done);
-  }
-  return activityHeader(part) + body + activityEnd(part, progress);
-}
-
-function report(message, success = false) {
-  const node = document.querySelector('#feedback');
-  node.textContent = message;
-  node.className = 'feedback ' + (success ? 'positive' : 'try-again');
-}
-
-function clearMark(control) {
-  control?.classList.remove('is-correct', 'is-wrong');
-  control?.removeAttribute('aria-invalid');
-}
-
-function mark(control, valid) {
-  clearMark(control);
-  if (!control) return;
-  control.classList.add(valid ? 'is-correct' : 'is-wrong');
-  if (!valid) control.setAttribute('aria-invalid', 'true');
-}
-
-function validateChoices(items, progress, startIndex = 0) {
-  let hint = '';
-  for (const [i, question] of items.entries()) {
-    const index = startIndex + i;
-    const choice = progress.choices[index];
-    const correct = choice === question.answer;
-    mark(main.querySelector(`[data-question="${index}"]`), correct);
-    if (!hint && !correct) hint = choice === undefined ? 'Choose an answer for each question.' : question.hint;
-  }
-  return hint;
-}
-
-function validateGaps(fields, progress) {
-  let hint = '';
-  for (const [index, field] of fields.entries()) {
-    const choice = progress.gaps[index];
-    const correct = choice === field.answer;
-    mark(main.querySelector(`[data-gap="${index}"]`), correct);
-    if (!hint && !correct) hint = choice === undefined ? 'Complete each blank first.' : field.hint;
-  }
-  return hint;
-}
-
-function refreshActivity(part, progress, focus = 'action') {
-  main.querySelector('.activity').innerHTML = renderActivity(part, progress);
-  if (focus === 'title') main.querySelector('#activity-title')?.focus({ preventScroll: true });
-  else main.querySelector('.activity-end button')?.focus({ preventScroll: true });
-}
-
-function completePart(part, progress) {
-  progress.done = true;
-  if (stageComplete(stages[run.stage])) {
-    run.unlocked = Math.max(run.unlocked, Math.min(run.stage + 1, stages.length - 1));
-  }
-  save();
-  main.querySelector('.route').outerHTML = route();
-  refreshActivity(part, progress);
-}
-
-function check() {
-  const { part, progress } = current();
-  if (part.type === 'reading') {
-    const hint = validateChoices([part.questions[progress.reading]], progress, progress.reading);
-    if (hint) return report(hint);
-    if (progress.reading === part.questions.length - 1) return completePart(part, progress);
-    progress.readingChecked = true;
-    save();
-    return refreshActivity(part, progress);
-  }
-  if (part.type === 'plan' && !progress.planConfirmed) {
-    const hint = validateChoices(part.questions, progress);
-    if (hint) return report(hint);
-    progress.planConfirmed = true;
-    save();
-    refreshActivity(part, progress);
-    main.querySelector('[data-gap="0"]').focus();
-    return;
-  }
-  if (part.type === 'order') {
-    if (progress.order.join() !== part.order.join()) {
-      return report(progress.order.length < part.order.length ? 'Put all four actions in order first.' : part.hint);
-    }
-    return completePart(part, progress);
-  }
-  const gapHint = validateGaps(gapsFor(part), progress);
-  const choiceHint = validateChoices(part.questions ?? [], progress);
-  if (gapHint || choiceHint) return report(gapHint || choiceHint);
-  return completePart(part, progress);
-}
-
-function nextPart() {
-  if (run.part + 1 < stages[run.stage].parts.length) {
-    return openPart(run.stage, run.part + 1, 'activity');
-  }
-  if (run.stage + 1 < stages.length) {
-    return openPart(run.stage + 1);
-  }
-  run.finished = true;
-  save();
-  screen = 'ending';
-  render('scene');
-}
-
-function changeOrder(letter, remove) {
-  const { part, progress } = current();
-  if (remove) progress.order = progress.order.filter(item => item !== letter);
-  else if (!progress.order.includes(letter)) progress.order.push(letter);
-  save();
-  main.querySelector('#order-task').outerHTML = orderTask(part, progress);
-  const next = main.querySelector('.order-card:not(:disabled)') ?? main.querySelector('[data-action="check"]');
-  next?.focus({ preventScroll: true });
-}
-
-function makeKey() {
-  const teacherNotes = {
-    chat: 'The walking option is from the station to the centre. Alex’s walk to the station is a separate journey. Model: “We shouldn’t walk because we’ll arrive at 10.10. The ranger is meeting us at ten.”',
-    detour: 'After the diversion: go past the supermarket, turn left at the traffic lights and look for the station on the right, opposite the sports centre.',
-    cafe: 'Put learners in pairs and let each choose a role. You can open the phrases for support. The usual bus bay is closed, so Leo asks about a place for the bus.',
-    beach: 'Model: “We can pick up the bottle. Leo, you mustn’t step over the rope. We should tell the ranger about the bag.”',
-  };
-  document.querySelector('#teacher-content').innerHTML = `<p>For A2–A2+ learners. Ask students to say each answer before checking it. The café conversation and final reply can be done aloud in pairs.</p>
-    ${stages.map(stage => `<details class="key-stage">
-      <summary>${stage.label}</summary>
-      ${stage.parts.map(part => `<h3>${part.title}</h3>
-        <ol>${[
-          ...gapsFor(part).map(item => item.text.includes('{}') ? item.text.replace('{}', item.answer) : item.answer),
-          ...(part.questions ?? []).map(item => item.options[item.answer]),
-          ...(part.order ?? []).map(letter => letter + ' · ' + part.items.find(item => item.letter === letter).text),
-        ].map(item => `<li>${escape(item)}</li>`).join('')}</ol>`).join('')}
-      ${teacherNotes[stage.id] ? `<p>${escape(teacherNotes[stage.id])}</p>` : ''}
-    </details>`).join('')}`;
-}
-
-document.addEventListener('change', event => {
-  if (screen !== 'quest') return;
-  const { progress } = current();
-  if ('gap' in event.target.dataset) {
-    progress.gaps[event.target.dataset.gap] = event.target.value;
-    clearMark(event.target);
-  } else if ('choice' in event.target.dataset) {
-    progress.choices[event.target.dataset.choice] = Number(event.target.value);
-    clearMark(event.target.closest('fieldset'));
-  } else {
-    return;
-  }
-  save();
-});
 
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-action]');
-  if (!button) return;
-  const { action, index, letter } = button.dataset;
+  const control = event.target.closest('button[data-action]');
+  if (!control || control.disabled) return;
+  const action = control.dataset.action;
+  const value = Number(control.dataset.value);
   switch (action) {
     case 'home':
-      screen = 'home';
-      render('scene');
+      screen = 'cover';
+      target = null;
+      render(true);
       break;
     case 'start':
-      openPart(run.stage, run.part);
-      break;
-    case 'scene':
-      openPart(Number(index));
-      break;
-    case 'check':
-      check();
-      break;
-    case 'next-question': {
-      const { part, progress } = current();
-      progress.reading++;
-      progress.readingChecked = false;
+      screen = 'quest';
+      run.started = true;
       save();
-      refreshActivity(part, progress, 'title');
+      render(true);
       break;
-    }
+    case 'chapter':
+      navigateChapter(value);
+      break;
+    case 'answer':
+      choose(control, value);
+      break;
+    case 'spot':
+      choose(control, value, true);
+      break;
+    case 'investigate':
+      if (locked || run.picked.includes(litter[value].id)) break;
+      target = { item: litter[value], index: 0 };
+      render(true);
+      break;
+    case 'cancel-search':
+      target = null;
+      render(true);
+      break;
     case 'next':
-      nextPart();
+      if (!locked) advance();
       break;
-    case 'order-add':
-      changeOrder(letter, false);
-      break;
-    case 'order-remove':
-      changeOrder(letter, true);
+    case 'replay':
+      renderedShot = '';
+      render(true);
       break;
     case 'ending':
       screen = 'ending';
-      render('scene');
+      render(true);
       break;
     case 'review':
-      openPart(0);
+      navigateChapter(0);
       break;
     case 'restart':
-      run = newRun();
-      openPart(0);
+      run = cleanRun();
+      run.started = true;
+      target = null;
+      screen = 'quest';
+      save();
+      render(true);
+      break;
+    case 'notice':
+      noticeDialog.showModal();
       break;
     case 'teacher':
-      if (!document.querySelector('#teacher-content').childElementCount) makeKey();
+      if (!document.querySelector('#teacher-content').childElementCount) fillKey();
       teacherDialog.showModal();
+      break;
+    case 'motion':
+      updateMotion(!motion);
       break;
   }
 });
 
+reducedMotion.addEventListener('change', event => updateMotion(!event.matches));
+document.querySelector('#notice-content').innerHTML = noticePaper();
+warmUpcoming();
+updateMotion(motion);
 render();
