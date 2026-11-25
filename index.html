@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#103d3c">
+  <meta name="description" content="An illustrated English quest for A2–A2+ learners. Guide the volunteers from Pebble Bay Station to Turtle Beach.">
+  <link rel="icon" type="image/webp" href="./assets/mark.webp">
+  <link rel="preload" href="./assets/turtle.webp" as="image">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Turtle Rescue | An English quest</title>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the quest</a>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <button class="brand" type="button" data-action="home" aria-label="Turtle Rescue home">
+        <img src="./assets/mark.webp" width="40" height="40" alt="">
+        <span>Turtle Rescue</span>
+      </button>
+      <button class="teacher-button" type="button" data-action="teacher">Teacher key</button>
+    </div>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <dialog id="teacher-key" aria-labelledby="teacher-title">
+    <form method="dialog" class="dialog-header">
+      <h2 id="teacher-title">Teacher key</h2>
+      <button type="submit" class="secondary">Close</button>
+    </form>
+    <div id="teacher-content"></div>
+  </dialog>
+  <noscript><p class="no-script">Turn on JavaScript to play Turtle Rescue.</p></noscript>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
