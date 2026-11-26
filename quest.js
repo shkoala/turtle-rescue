@@ -5,14 +5,32 @@ export const notice = [
   'Anyone aged 12 or over can join. If you’re under 16, you must come with an adult. You should wear old trainers.',
 ];
 
+const road = (place, time, art, start, posts, tracks) => ({
+  place, time, art, cast: [], road: { start, posts, tracks },
+});
+const post = (sign, x, y, scale = 1) => ({ sign, x, y, scale });
+
 export const scenes = {
   town: { place: 'Pebble Bay', time: 'Friday', art: 'town', cast: ['Mia', 'Leo'] },
   phone: { place: 'Group chat', time: 'Friday evening', art: 'town', cast: ['Mia', 'Leo'] },
   ready: { place: 'Getting ready', time: 'Saturday morning', art: 'town', cast: ['Mia', 'Leo'] },
   washout: { place: 'Mill Lane', time: 'Saturday morning', art: 'washed', cast: [] },
+  carLights: road('Station Road diversion', 'Saturday morning', 'road-lights', null,
+    [post('green', 24, 63, .86), post('diversion-ahead', 21, 71, .76)], {}),
   warden: { place: 'Maple Street', time: 'Saturday morning', art: 'warden', cast: [] },
-  station: { place: 'Pebble Bay Station', time: '9.25 a.m.', art: 'station', cast: ['Mia', 'Leo'] },
+  station: { place: 'Pebble Bay railway station', time: '9.25 a.m.', art: 'station-forecourt', cast: ['Nina', 'Max', 'Alex', 'Mia', 'Leo'] },
+  boarding: { place: 'The volunteer bus bay', time: '9.28 a.m.', art: 'station', cast: ['Mia', 'Leo'] },
   ride: { place: 'On the volunteer bus', time: '9.30 a.m.', art: 'coast', cast: [], vehicle: 'moving' },
+  junction: road('Harbour junction', '9.32 a.m.', 'road-left', [34, 94, 1, 0],
+    [post('left-only', 20, 70)], { left: [[35, 77, .72, 0], [29, 60, .45, -4], [14, 48, .23, -7]] }),
+  fork: road('The fork for Beech Street', '9.34 a.m.', 'road-fork', [40, 94, 1, 0],
+    [post('no-left', 17, 68, .88), post('right', 50, 49, .84)], { right: [[45, 76, .72, 0], [60, 58, .44, 4], [76, 38, .20, 6]] }),
+  beech: road('Beech Street', '9.36 a.m.', 'road-speed', [45, 95, 1, 0],
+    [post('speed', 32, 71)], { ahead: [[46, 76, .66, 0], [54, 53, .29, 0]] }),
+  fallen: road('The blocked lane', '9.37 a.m.', 'road-tree', [25, 94, 1, 0],
+    [post('no-entry', 64, 61, .9)], { main: [[24, 77, .72, 0], [18, 64, .46, -4], [17, 50, .24, -6]] }),
+  signals: road('Village crossroads', '9.39 a.m.', 'road-lights', [40, 85, 1, 0],
+    [post('signal', 26, 63)], { ahead: [[44, 66, .65, 0], [50, 48, .25, 0]] }),
   tyre: { place: 'Beech Street', time: '9.40 a.m.', art: 'coast', cast: [], vehicle: 'burst' },
   cafe: { place: 'Pine Café', time: '9.40 a.m.', art: 'cafe', cast: ['Leo'] },
   walk: { place: 'On the way to the centre', time: '9.46 a.m.', art: 'town', cast: ['Mia', 'Leo'] },
@@ -87,13 +105,14 @@ export const chapters = [
   {
     name: 'The washout',
     steps: [
-      pick('ready', 'Max', 'Max always {} a helmet when he rides his bike.', ['wear', 'wears'], 1, 'Max is one person. Add -s in the present simple.'),
-      pick('ready', 'Mum', 'In the car, Mia and Leo must {} seat belts.', ['wear', 'to wear'], 0, 'Use the base form after “must”.'),
+      say('ready', 'Max', 'Dad and I are about to leave. See you at the station!', 'Get into Mum’s car'),
+      pick('ready', 'Mum', 'Before we set off, please {} your seat belts.', ['carry', 'fasten', 'take off'], 1,
+        'Fasten a seat belt means to click it into place.'),
       say('washout', 'Mum', 'Oh! The storm has washed away part of Mill Lane. We can’t take our usual road to the station.', 'Look at the diversion', { effect: 'washout' }),
       pick('washout', 'Mia', '{} at the junction. Follow the yellow diversion sign.', ['Go straight on', 'Turn right', 'Turn left'],
         2, 'Look at the arrow on the yellow sign.', { sign: 'diversion-left' }),
-      pick('washout', 'Mia', 'The next light is green. At the traffic lights, {}.', ['go straight on', 'turn left', 'turn right'],
-        0, 'Follow the arrow pointing straight ahead.', { sign: 'diversion-ahead' }),
+      pick('carLights', 'Mia', 'The next light is green. At the traffic lights, {}.', ['go straight on', 'turn left', 'turn right'],
+        0, 'Follow the arrow pointing straight ahead on the yellow sign.'),
       find('warden', 'Mum', 'The diversion ends here. I’ll pull into this bay and ask the traffic warden for directions.',
         [spot('Ask the traffic warden', 64, 51, 'person')], 0, ''),
       pick('warden', 'Mum', 'Excuse me. {}', ['Is there a café around here?', 'Do you know where the station is?', 'Is it far?'],
@@ -110,28 +129,42 @@ export const chapters = [
     ],
   },
   {
+    name: 'The station',
+    steps: [
+      say('station', 'Mia', 'We made it to Pebble Bay railway station! The train is at the platform, the bikes are by the racks, and our friends are waiting outside.', 'Meet the others'),
+      { type: 'search', collection: 'friends', scene: 'station', speaker: 'Mia', text: 'Say hello to Nina, Max and Alex. How did each friend get here?' },
+      say('station', 'Leo', 'We’re all here, and so are the grown-ups. Our volunteer bus leaves from the bay outside the station at 9.30.', 'Go to the bus bay'),
+    ],
+  },
+  {
     name: 'The bus',
     steps: [
-      find('station', 'Nina', 'You made it! Everyone’s here. Your mum can leave her car here and come with us.',
+      find('boarding', 'Nina', 'There’s the volunteer bus. Let’s get on together.',
         [spot('Board the volunteer bus', 41, 54, 'door')], 0, ''),
-      pick('station', 'Driver', 'When you get on the bus, don’t {}.', ['pushes', 'push'], 1, 'Use the base form after “don’t”.'),
-      pick('station', 'Driver', 'If you’re standing on the bus, you should {} on to a handgrip.', ['hold', 'to hold'], 0, 'Use the base form after “should”.'),
-      pick('station', 'Driver', 'You mustn’t {} out of the bus window.', ['leaning', 'lean'], 1, 'Use the base form after “mustn’t”.'),
-      pick('station', 'Driver', 'You should {} the aisle clear.', ['keep', 'keeps'], 0, 'Use the base form after “should”.'),
-      pick('station', 'Driver', 'Wait until the bus {} before you get off.', ['stop', 'stops'], 1, '“The bus” is singular.'),
+      pick('boarding', 'Driver', 'Wait your turn when you get on the bus. Don’t {} past other people.', ['lean', 'push', 'carry'], 1,
+        'Pushing past people means using force to get by them.'),
+      pick('boarding', 'Driver', 'If you’re standing, you should {} a handgrip to keep your balance.', ['hold on to', 'get off', 'lean out of'], 0,
+        'Hold on to something means keep your hand firmly on it.'),
+      pick('boarding', 'Driver', 'You mustn’t {} out of the bus window.', ['leaning', 'lean'], 1, 'Use the base form after “mustn’t”.'),
+      pick('boarding', 'Driver', 'People need space to walk. Please {} the aisle clear.', ['carry', 'keep', 'fasten'], 1,
+        'To keep the aisle clear, leave the space between the seats free.'),
+      pick('boarding', 'Driver', 'When the bus stops at the café, you can {}.', ['get on', 'turn off', 'get off'], 2,
+        'To leave a bus, get off it.'),
       say('ride', 'Driver', 'It’s 9.30. First stop, Pine Café!', 'Ride to the café', { type: 'clip', duration: 1650 }),
-      pick('ride', 'Mia', 'We can’t go straight on here. Which way can we go?', ['Turn right', 'Turn left'],
-        1, 'Follow the white arrow on the blue sign.', { sign: 'left-only' }),
-      can('ride', 'Mia', 'You {} turn left here.', 1, 'The left arrow is crossed out.', 'no-left'),
-      pick('ride', 'Leo', 'The café is on Beech Street. The street sign points right. {} into Beech Street.',
-        ['Go straight on', 'Turn right', 'Turn left'], 1, 'Follow the sign to Beech Street.', { sign: 'right' }),
-      can('ride', 'Mia', 'You {} drive at 30 mph here when it’s safe.', 0, 'This is the speed limit.', 'speed'),
-      can('ride', 'Leo', 'You {} drive at 40 mph here.', 1, '40 mph is above the limit.', 'speed'),
-      can('ride', 'Mia', 'You {} drive into this side street.', 1, 'This sign means No entry.', 'no-entry'),
-      pick('ride', 'Leo', '{} and wait until they turn green.',
-        ['Go straight on', 'Turn right', 'Stop at the traffic lights'], 2, 'The red light is on.', { sign: 'lights' }),
-      pick('ride', 'Mia', 'The light is green now. The café is up ahead. {}.',
-        ['Go straight on', 'Turn left', 'Turn right'], 0, 'Up ahead means in front of the bus.', { sign: 'green' }),
+      pick('junction', 'Mia', 'There’s a turning by the harbour. Which way does the sign tell us to go?', ['Turn right', 'Turn left', 'Go straight on'],
+        1, 'Follow the white arrow on the blue sign.', { drive: 'left' }),
+      can('fork', 'Mia', 'We’re at a fork. You {} turn left here.', 1, 'The left arrow on the sign is crossed out.'),
+      pick('fork', 'Leo', 'The café is on Beech Street. {} at the fork.',
+        ['Go straight on', 'Turn right', 'Turn left'], 1, 'The sign for Beech Street points to the right-hand branch.', { drive: 'right' }),
+      can('beech', 'Mia', 'You {} drive at 30 mph here when it’s safe.', 0, 'This is the speed limit.'),
+      pick('beech', 'Leo', 'You {} drive at 40 mph here.', ['can', 'can’t'], 1,
+        '40 mph is above the limit.', { drive: 'ahead' }),
+      pick('fallen', 'Mia', 'A tree has fallen across the side street. We {} drive into it.',
+        ['can', 'can’t'], 1, 'The red and white sign means No entry. The main road is clear.', { drive: 'main' }),
+      pick('signals', 'Leo', '{} and wait for green.',
+        ['Go straight on', 'Turn right', 'Stop at the traffic lights'], 2, 'The red light is on.', { signal: 'lights', drive: 'stop' }),
+      pick('signals', 'Mia', 'The light is green now. The café is straight ahead. {}.',
+        ['Go straight on', 'Turn left', 'Turn right'], 0, 'Straight ahead means in front of the bus.', { signal: 'green', drive: 'ahead' }),
       say('tyre', 'Driver', 'A tyre burst as we pulled into the bay. We’re safely stopped, but this bus can’t go anywhere yet.', 'Check the time',
         { type: 'clip', duration: 2000, effect: 'burst' }),
       say('cafe', 'Mia', 'It’s 9.40. Pine Café is right here. Let’s get the gloves and bags, then ask how far it is to the centre from here.', 'Look for Pine Café', { vehicle: 'parked' }),
@@ -194,7 +227,7 @@ export const chapters = [
       pick('briefing', 'Ranger', 'It’s sunny today. You {} wear a hat.', ['should', 'shouldn’t'], 0, 'A hat is a good idea in the sun.'),
       pick('briefing', 'Ranger', 'Full bags are hard to carry. You {} fill yours right to the top.', ['should', 'shouldn’t'], 1, 'Leave room so the bag is easier to carry.'),
       say('cleanup', 'Mia', 'I can see a bottle on the open sand. There’s a plastic bag behind the rope, too.', 'Start the beach clean-up'),
-      { type: 'search', scene: 'cleanup', speaker: 'Mia', text: 'Look for the two pieces of rubbish. Decide what to do with each one.' },
+      { type: 'search', collection: 'litter', scene: 'cleanup', speaker: 'Mia', text: 'Look for the two pieces of rubbish. Decide what to do with each one.' },
       say('cleanup', 'Ranger', 'Thanks for telling me about the bag. I’ll take care of it. You’ve cleared the rubbish from the open beach!', 'Finish the clean-up'),
       say('dusk', 'Narrator', 'That evening, the ranger sends a video to the group chat. A few tiny turtles have just come out of the sand.', 'Watch the video'),
       say('dusk', 'Mia', 'Look! They’re making their way to the sea.', 'See the ending', { type: 'clip', duration: 4200, effect: 'hatch' }),
@@ -202,7 +235,7 @@ export const chapters = [
   },
 ];
 
-export const litter = [
+const litter = [
   {
     id: 'bottle', spot: spot('Bottle on the open sand', 35, 72, 'bottle'),
     prompts: [
@@ -225,3 +258,33 @@ export const litter = [
     done: 'Ranger told',
   },
 ];
+
+const friends = [
+  {
+    id: 'nina', spot: spot('Nina', 20, 31, 'person'),
+    prompts: [
+      pick('station', 'Nina', 'Hi! Mum and I {} the train at Pebble Bay and walked out here to meet you.',
+        ['got on', 'got off', 'missed'], 1, 'Nina is outside the station now. She got off the train.'),
+    ],
+    done: 'Nina · by train',
+  },
+  {
+    id: 'max', spot: spot('Max', 33, 28, 'person'),
+    prompts: [
+      pick('station', 'Max', 'Dad and I came by bike. When I ride my bike, I {} a helmet to protect my head.',
+        ['carry', 'wear'], 1, 'Max wears his helmet on his head while he cycles.'),
+      pick('station', 'Max', 'I’ve parked my bike and taken off my helmet. Now I’ll {} it in my hand.',
+        ['wear', 'carry'], 1, 'You carry something when you hold it and take it with you.'),
+    ],
+    done: 'Max · by bike',
+  },
+  {
+    id: 'alex', spot: spot('Alex', 46, 32, 'person'),
+    prompts: [
+      say('station', 'Alex', 'Hello! My aunt and I walked here from her house. She’s over there with your mum.', 'Say hello to Alex'),
+    ],
+    done: 'Alex · on foot',
+  },
+];
+
+export const collections = { friends, litter };

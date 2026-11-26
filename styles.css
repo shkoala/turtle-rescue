@@ -93,12 +93,13 @@ p, li { line-height: 1.56; }
 .trail { margin-bottom: .7rem; }
 .trail ol {
   display: grid;
-  grid-template-columns: repeat(7, minmax(105px, 1fr));
+  grid-template-columns: repeat(var(--stops), minmax(105px, 1fr));
   padding: .25rem .45rem;
   list-style: none;
   position: relative;
   overflow: auto hidden;
   scrollbar-width: thin;
+  scrollbar-color: #62877c #0d2b2b;
   border: 1px solid #244748;
   border-radius: 10px;
   background: #0d2b2b;
@@ -200,7 +201,7 @@ main { padding: 0 0 1rem; }
 .world-back { overflow: hidden; }
 .landscape { height: 100%; width: 100%; max-width: none; object-fit: cover; object-position: center 55%; animation: reveal .45s ease both; }
 .scene-town .landscape { object-position: left center; }
-.scene-phone .landscape, .scene-station .landscape, .scene-ready .landscape { object-position: center 54%; }
+.scene-phone .landscape, .scene-boarding .landscape, .scene-ready .landscape { object-position: center 54%; }
 .scene-cleanup .landscape { object-position: center 60%; }
 .scene-dusk .landscape { object-position: 72% center; }
 .scene-light {
@@ -256,6 +257,11 @@ main { padding: 0 0 1rem; }
 .actor-leo { left: 27%; height: 58%; }
 .scene-town .actor-mia { left: 29%; height: 64%; }
 .scene-town .actor-leo { left: 43%; height: 60%; }
+.scene-station .actor-nina { left: 16.5%; bottom: 16%; height: 46%; }
+.scene-station .actor-max { left: 29.5%; bottom: 15%; height: 49%; }
+.scene-station .actor-alex { left: 42.5%; bottom: 16%; height: 45%; }
+.scene-station .actor-mia { left: 4%; bottom: 5%; height: 42%; }
+.scene-station .actor-leo { left: 49.5%; bottom: 4.2%; height: 38%; }
 .actor.speaking { filter: drop-shadow(0 0 7px #f4d9986f) drop-shadow(2px 7px 9px #082122a0); transform: scale(1.021); }
 .scene-cafe .actor-leo { left: 10%; height: 60%; }
 .scene-centre .actor { left: 7%; height: 47%; }
@@ -445,43 +451,147 @@ main { padding: 0 0 1rem; }
 .token-bag { width: 20px; height: 21px; border-radius: 4px 4px 2px 2px; clip-path: polygon(7% 0, 33% 0, 33% 24%, 65% 24%, 65% 0, 93% 0, 100% 100%, 0 100%); background: #526f66; }
 .token-bottle { width: 12px; height: 25px; border-radius: 4px 4px 3px 3px; transform: rotate(-26deg); background: #457f87; clip-path: polygon(32% 0, 68% 0, 68% 24%, 96% 38%, 98% 100%, 2% 100%, 4% 38%, 32% 24%); }
 
-.road-prop {
+.mounted-sign {
   position: absolute;
-  left: 29%;
-  top: 41%;
+  inset: var(--sign-y) auto auto var(--sign-x);
   display: grid;
   place-items: center;
-  width: 158px;
-  height: 148px;
-  padding: 1.1rem;
-  transform: translate(-50%, -50%);
-  border: 1px solid #fcf1d192;
-  border-radius: 15px;
-  background: #f8f3dcf4;
-  box-shadow: 0 9px 27px #102a2f82;
-  animation: reveal .26s ease;
+  padding-bottom: clamp(30px, 5vw, 86px);
+  transform: translate(-50%, -100%) scale(var(--sign-scale));
+  transform-origin: center bottom;
+  isolation: isolate;
   z-index: 3;
 }
-.moving .road-prop { left: 15%; top: 36%; }
-.sign { position: relative; width: 80px; height: 80px; display: grid; place-items: center; border-radius: 50%; color: #122322; font-size: 2.22rem; font-weight: 700; }
-.sign .arrow { display: block; width: 40px; height: 29px; background: currentColor; clip-path: polygon(0 50%, 38% 0, 38% 32%, 100% 32%, 100% 68%, 38% 68%, 38% 100%); }
+.mounted-sign::before {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  width: 70%;
+  height: 6px;
+  transform: translateX(25%) rotate(-11deg);
+  border-radius: 50%;
+  background: #11272791;
+  filter: blur(1.6px);
+  z-index: -2;
+}
+.mounted-sign::after {
+  content: '';
+  position: absolute;
+  inset: 28% auto 0 50%;
+  width: clamp(4px, .45vw, 7px);
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: linear-gradient(90deg, #697578, #acb6ae 38%, #758480 72%, #535f61);
+  box-shadow: 1px 0 #15332e62;
+  z-index: -1;
+}
+.sign {
+  --unit: clamp(46px, 5.35vw, 78px);
+  position: relative;
+  width: var(--unit);
+  height: var(--unit);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: 2px 3px 5px #1432328f;
+  color: #122322;
+  font-size: clamp(1.4rem, 2.55vw, 2.2rem);
+  font-weight: 700;
+}
+.sign .arrow { display: block; width: 62%; height: 48%; background: currentColor; clip-path: polygon(0 50%, 38% 0, 38% 32%, 100% 32%, 100% 68%, 38% 68%, 38% 100%); }
 .arrow-ahead { transform: rotate(90deg); }
 .arrow-right { transform: rotate(180deg); }
-.sign-diversion-left, .sign-diversion-ahead, .sign-right { width: 131px; height: 60px; grid-auto-flow: column; gap: .32rem; padding: .4rem; border: 3px solid #252a23; border-radius: 4px; background: #fae058; font-size: .89rem; }
+.sign-diversion-left, .sign-diversion-ahead, .sign-right {
+  width: clamp(96px, 9.9vw, 144px);
+  height: clamp(36px, 3.45vw, 55px);
+  grid-auto-flow: column;
+  gap: .2rem;
+  padding: .2rem .34rem;
+  border: 2px solid #252a23;
+  border-radius: 3px;
+  background: #fae058;
+  font-size: clamp(.7rem, 1.04vw, .92rem);
+  white-space: nowrap;
+}
 .sign-right { border-color: #f3fffa; background: #286050; color: #fff; }
-.sign-diversion-left .arrow, .sign-diversion-ahead .arrow, .sign-right .arrow { width: 24px; height: 18px; }
-.sign-no-left, .sign-speed, .sign-no-parking { border: 7px solid #bf2932; background: #fffdf6; }
-.sign-no-left .arrow-bent { width: 46px; height: 43px; clip-path: polygon(0 24%, 33% 0, 33% 12%, 70% 12%, 89% 26%, 89% 100%, 67% 100%, 67% 33%, 33% 33%, 33% 50%); }
-.sign-no-left::after, .sign-no-parking::after { content: ''; position: absolute; width: 68px; height: 6px; transform: rotate(-45deg); background: #bf2932; }
+.sign-diversion-left .arrow, .sign-diversion-ahead .arrow, .sign-right .arrow { width: clamp(16px, 1.75vw, 25px); height: clamp(12px, 1.3vw, 19px); }
+.sign-no-left, .sign-speed, .sign-no-parking { border: clamp(4px, .5vw, 7px) solid #bf2932; background: #fffdf6; }
+.sign-no-left .arrow-bent { width: 64%; height: 66%; clip-path: polygon(0 24%, 33% 0, 33% 12%, 70% 12%, 89% 26%, 89% 100%, 67% 100%, 67% 33%, 33% 33%, 33% 50%); }
+.sign-no-left::after, .sign-no-parking::after { content: ''; position: absolute; width: 104%; height: clamp(4px, .45vw, 7px); transform: rotate(-45deg); background: #bf2932; }
 .sign-no-entry { background: #bf2932; }
-.sign-no-entry::after { content: ''; width: 53px; height: 12px; border-radius: 1px; background: #fff; }
+.sign-no-entry::after { content: ''; width: 68%; height: 15%; border-radius: 1px; background: #fff; }
 .sign-parking, .sign-left-only, .sign-no-parking { background: #205292; color: #fff; }
-.sign-parking { height: 66px; margin-bottom: 1.18rem; border: 3px solid #fffdf5; border-radius: 5px; }
+.sign-parking { height: calc(var(--unit) * .86); margin-bottom: 1.18rem; border: 3px solid #fffdf5; border-radius: 5px; }
 .sign-parking small { position: absolute; top: calc(100% + 5px); width: max-content; padding: .12rem .25rem; border: 1px solid #424846; border-radius: 3px; background: #f4f5ec; color: #101f20; font-size: .7rem; }
-.sign-lights, .sign-green { width: 45px; height: 108px; padding-block: .35rem; border-radius: 9px; background: #1b282b; }
-.sign-lights i, .sign-green i { width: 23px; height: 23px; border-radius: 50%; background: #4d585a; }
+.sign-lights, .sign-green { width: clamp(28px, 3.2vw, 45px); height: clamp(62px, 7.75vw, 103px); padding-block: .24rem; border-radius: 7px; background: #1b282b; }
+.sign-lights i, .sign-green i { width: 52%; aspect-ratio: 1; border-radius: 50%; background: #4d585a; }
 .sign-lights i:first-child { background: #f44b3d; box-shadow: 0 0 10px #ff5e50; }
 .sign-green i:last-child { background: #2bc88a; box-shadow: 0 0 10px #2bc88a; }
+
+.road-world, .rail-picture { container-type: size; }
+.rail-picture { position: absolute; inset: 0; }
+.road-plane {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100cqw, 177.778cqh);
+  height: max(100cqh, 56.25cqw);
+  transform: translate(-50%, -50%);
+}
+.road-image { width: 100%; height: 100%; max-width: none; object-fit: fill; animation: reveal .34s ease both; }
+.railway-name {
+  position: absolute;
+  left: 64.7%;
+  top: 23.6%;
+  transform: translate(-50%, -50%) rotate(-2.8deg);
+  color: #f8e7bc;
+  font: 700 clamp(.56rem, 1.52cqw, 1.47rem)/1 var(--serif);
+  letter-spacing: .13em;
+  white-space: nowrap;
+}
+.station-clock {
+  position: absolute;
+  left: 63.8%;
+  top: 13.5%;
+  width: 4.85%;
+  aspect-ratio: .95;
+  transform: translate(-50%, -50%);
+  border: .22cqw solid #746841;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #f2e9d4 86%, transparent 88%),
+    repeating-conic-gradient(#594c30 0deg 2deg, #f2e9d4 2deg 30deg);
+  box-shadow: inset 0 0 .31cqw #8b775986;
+}
+.station-clock i {
+  position: absolute;
+  left: calc(50% - .09cqw);
+  bottom: 50%;
+  width: .18cqw;
+  height: 38%;
+  transform: rotate(150deg);
+  transform-origin: center bottom;
+  border-radius: 2px;
+  background: #24382d;
+}
+.station-clock i:last-child { height: 27%; transform: rotate(282.5deg); }
+.road-bus {
+  position: absolute;
+  z-index: 2;
+  width: clamp(70px, 15cqw, 218px);
+  transform-origin: center bottom;
+  filter: drop-shadow(1px 6px 5px #13282289);
+  pointer-events: none;
+}
+.road-bus img { width: 100%; }
+.braking .road-bus::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 10% 78%, #ff5937a0, transparent 14%),
+    radial-gradient(ellipse at 89% 78%, #ff5937a0, transparent 14%);
+  animation: brake-glow .8s ease both;
+}
+.turning .road-image { animation: road-pickup 1.33s ease both; }
 
 .effect-burst .landscape, .scene-walk .landscape {
   position: absolute;
@@ -587,9 +697,6 @@ main { padding: 0 0 1rem; }
   transform: rotate(-12deg);
   animation: pop 2s .25s ease both;
 }
-.drive-on .vehicle-body { animation: drive-on .53s ease-out both; }
-.braking .road-track { animation-play-state: paused; filter: none; }
-.braking .vehicle-body, .braking .bus-tyre::after { animation-play-state: paused; }
 .hatch-track { position: absolute; inset: 0; pointer-events: none; }
 .hatchling { position: absolute; bottom: 12%; left: 21%; width: clamp(30px, 5.8%, 76px); filter: drop-shadow(1px 3px 4px #283e3d8c); animation: hatch-walk 4.2s ease-in both; }
 .hatchling-2 { left: 25%; bottom: 15%; width: clamp(26px, 4.6%, 64px); animation-delay: .35s; }
@@ -616,7 +723,8 @@ main { padding: 0 0 1rem; }
 }
 @keyframes bus-arrive { from { transform: translateX(-40%) scale(.97); } to { transform: translateX(0) scale(1); } }
 @keyframes bus-suspension { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-@keyframes drive-on { 0% { transform: translateX(0); } 70% { transform: translateX(5%); } 100% { transform: translateX(0); } }
+@keyframes brake-glow { 0%, 100% { opacity: .32; } 35%, 80% { opacity: 1; } }
+@keyframes road-pickup { 0%, 100% { filter: none; } 80% { filter: blur(.9px); } }
 @keyframes wheel-spin { to { transform: rotate(360deg); } }
 @keyframes tyre-stop { 0% { transform: translateX(-12%); } 30% { transform: translateX(2%) rotate(-.4deg); } 42% { transform: translateX(4%) rotate(4deg) translateY(1px); } 52% { transform: translateX(5%) rotate(2deg); } 74%,100% { transform: translateX(5%) rotate(3deg) translateY(1px); } }
 @keyframes flatten { 0%,32% { transform: translate(-50%,-50%); } 53%,100% { transform: translate(-50%,-60%) scaleY(.79); } }
@@ -665,7 +773,7 @@ main { padding: 0 0 1rem; }
 
 @media (max-width: 1040px) {
   .game-stage { grid-template-columns: minmax(0, 1fr) minmax(335px, 47%); column-gap: .8rem; }
-  .trail ol { grid-template-columns: repeat(7, minmax(110px, 1fr)); }
+  .trail ol { grid-template-columns: repeat(var(--stops), minmax(110px, 1fr)); }
   .route-name { font-size: .8rem; }
 }
 @media (min-width: 801px) {
@@ -687,6 +795,9 @@ main { padding: 0 0 1rem; }
     height: clamp(255px, 43svh, 470px);
     background: #123737;
   }
+  .has-road, .scene-station { --location-strip: 3.1rem; }
+  .game-stage.has-road .view { height: calc((100vw - 1rem - 2px) * .5625 + var(--location-strip)); }
+  .game-stage.scene-station .view { height: calc(max(214px, (100vw - 1rem - 2px) * .625) + var(--location-strip)); }
   #notice-panel { padding: .8rem; }
   .console { border-radius: 0; border: 0; border-top: 1px solid #8ecab275; box-shadow: none; }
   .speech { padding: 1rem; }
@@ -705,6 +816,25 @@ main { padding: 0 0 1rem; }
   .actor-leo { left: 41%; height: 61%; }
   .scene-town .actor-mia { left: 35%; }
   .scene-town .actor-leo { left: 64%; }
+  .scene-station .actor-nina { left: 12%; }
+  .scene-station .actor-max { left: 39%; }
+  .scene-station .actor-alex { left: 67%; }
+  .scene-station .actor-mia { left: 1%; height: 34%; }
+  .scene-station .actor-leo { left: 81%; height: 33%; }
+  .scene-station .friend-nina { left: 20%; }
+  .scene-station .friend-max { left: 47%; }
+  .scene-station .friend-alex { left: 75%; }
+  .scene-station .hotspot {
+    top: auto;
+    bottom: 4%;
+    transform: translateX(-50%);
+    display: grid;
+    place-items: end center;
+    min-width: 56px;
+    min-height: 44px;
+  }
+  .scene-station .hotspot-pin, .scene-station .spot-shortcuts { display: none; }
+  .scene-station .hotspot-name { min-width: 44px; }
   .scene-cafe .actor-leo { left: 19%; }
   .scene-centre .actor, .scene-cleanup .actor-mia { left: 6%; }
   .scene-centre .actor-leo { left: 21%; }
@@ -714,9 +844,21 @@ main { padding: 0 0 1rem; }
   .crossing-1 .actor-leo { left: 35%; }
   .crossing-2 .actor-mia, .crossing-3 .actor-mia { left: 37%; }
   .crossing-2 .actor-leo, .crossing-3 .actor-leo { left: 53%; }
-  .road-prop { width: 101px; height: 100px; padding: 0; top: 51%; left: 28%; }
-  .moving .road-prop { left: 22%; top: 50%; }
-  .sign { scale: .75; }
+  .has-road .road-world, .scene-station .world-back, .scene-station .hotspots { top: var(--location-strip); }
+  :is(.has-road, .scene-station) .location {
+    inset: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    width: 100%;
+    max-width: none;
+    height: var(--location-strip);
+    padding: .38rem .65rem;
+    border: 0;
+    border-radius: 0;
+  }
+  :is(.has-road, .scene-station) .scene-time { white-space: nowrap; }
+  :is(.has-road, .scene-station) .location h1 { margin: 0; font-size: clamp(1.05rem, 4.4vw, 1.85rem); }
   .hotspot-pin { height: 39px; width: 39px; }
   .hotspot-name { padding: .23rem .4rem; font-size: .71rem; }
   .hotspot-pin > i { width: 11px; height: 11px; }
@@ -729,7 +871,7 @@ main { padding: 0 0 1rem; }
 @media (max-width: 430px) {
   .masthead .brand span { display: none; }
   .masthead .brand img { width: 33px; height: 33px; }
-  .trail ol { grid-template-columns: repeat(7, minmax(101px, 1fr)); }
+  .trail ol { grid-template-columns: repeat(var(--stops), minmax(101px, 1fr)); }
   .trail li button, .route-locked { min-height: 38px; }
   .choices-short .choice-button { min-width: 4rem; }
   .route-cards { gap: .35rem; }

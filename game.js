@@ -1,10 +1,12 @@
-import { chapters, litter, notice, scenes } from './quest.js?v=adventure';
+import { chapters, collections, notice, scenes } from './quest.js?v=road-scenes';
 
 const main = document.querySelector('#main');
 const route = document.querySelector('#route');
 const noticeDialog = document.querySelector('#notice');
 const teacherDialog = document.querySelector('#teacher-key');
-const storage = 'turtle-rescue-adventure-1';
+const storage = 'turtle-rescue-adventure-2';
+const priorStorage = 'turtle-rescue-adventure-1';
+const cafeChapter = chapters.findIndex(chapter => chapter.name === 'Pine Café');
 const portraits = new Set(['Mia', 'Leo', 'Nina', 'Alex', 'Max']);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const warmed = new Map();
@@ -22,18 +24,40 @@ const signDescriptions = {
   'no-parking': ['Blue circle with a red border and red diagonal line'],
   parking: ['White P on blue, with a plate for bus parking', 'P'],
 };
+const landmarkPosts = {
+  'diversion-left': { x: 42, y: 69, scale: .9 },
+  'no-parking': { x: 25, y: 63, scale: .78 },
+  parking: { x: 20, y: 83, scale: .95 },
+};
 
 const icon = (name, className = '') => '<span class="token ' + className + ' token-' + name + '" aria-hidden="true"></span>';
 
 function cleanRun() {
-  return { chapter: 0, index: 0, unlocked: 0, started: false, finished: false, supplies: false, picked: [] };
+  return {
+    chapter: 0, index: 0, unlocked: 0, started: false, finished: false, supplies: false,
+    found: { friends: [], litter: [] },
+  };
 }
 
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(storage));
-    if (saved && chapters[saved.chapter]?.steps[saved.index] && chapters[saved.unlocked] && Array.isArray(saved.picked)) {
+    if (saved && chapters[saved.chapter]?.steps[saved.index] && chapters[saved.unlocked]
+      && Array.isArray(saved.found?.friends) && Array.isArray(saved.found?.litter)) {
       return saved;
+    }
+    const prior = JSON.parse(localStorage.getItem(priorStorage));
+    if (prior && Number.isInteger(prior.chapter) && prior.chapter >= 0 && prior.chapter <= 6
+      && Number.isInteger(prior.unlocked) && prior.unlocked >= prior.chapter && prior.unlocked <= 6) {
+      // Earlier players who were on the bus resume at the new station scene.
+      const chapter = prior.chapter > 3 ? prior.chapter + 1 : prior.chapter;
+      const index = prior.chapter !== 3 && chapters[chapter].steps[prior.index] ? prior.index : 0;
+      const unlocked = prior.unlocked > 3 ? prior.unlocked + 1 : prior.unlocked;
+      return {
+        ...cleanRun(), chapter, index, unlocked,
+        started: Boolean(prior.started), finished: Boolean(prior.finished), supplies: Boolean(prior.supplies),
+        found: { friends: [], litter: Array.isArray(prior.picked) ? prior.picked : [] },
+      };
     }
   } catch {
     // Start a new run if saved data cannot be read.
@@ -82,10 +106,12 @@ function warmUpcoming() {
     const scene = scenes[beat.scene];
     warm(scene.art);
     scene.cast.forEach(person => warm('actor-' + person.toLowerCase()));
+    if (beat.scene === 'station') warm('actor-max-carry');
     if (scene.vehicle || beat.vehicle) {
       warm('bus');
       warm('wheel');
     }
+    if (scene.road?.start) warm('bus-rear');
     if (beat.effect === 'hatch') warm('turtle-walk');
   }
 }
@@ -94,8 +120,12 @@ function button(label, action, className = 'primary', extra = '') {
   return '<button type="button" class="' + className + '" data-action="' + action + '" ' + extra + '>' + escape(label) + '</button>';
 }
 
+function chapterBeat() {
+  return chapters[run.chapter].steps[run.index];
+}
+
 function currentBeat() {
-  return target ? target.item.prompts[target.index] : chapters[run.chapter].steps[run.index];
+  return target ? target.item.prompts[target.index] : chapterBeat();
 }
 
 function showRoute() {
@@ -103,7 +133,7 @@ function showRoute() {
     route.innerHTML = '';
     return;
   }
-  route.innerHTML = '<ol aria-label="Quest route">' + chapters.map((chapter, index) => {
+  route.innerHTML = '<ol aria-label="Quest route" style="--stops:' + chapters.length + '">' + chapters.map((chapter, index) => {
     const label = '<span class="route-dot">' + (index < run.unlocked ? '✓' : index + 1) + '</span><span class="route-name">' + chapter.name + '</span>';
     const description = (index + 1) + '. ' + chapter.name;
     const current = index === run.chapter ? ' aria-current="step"' : '';
@@ -119,7 +149,29 @@ function showRoute() {
   }
 }
 
+function roadPosition([x, y, scale, tilt]) {
+  return { left: x + '%', top: y + '%', transform: 'translate(-50%, -100%) scale(' + scale + ') rotate(' + tilt + 'deg)' };
+}
+
+function roadWorld(scene) {
+  const start = scene.road.start && roadPosition(scene.road.start);
+  const bus = start
+    ? '<div class="road-bus" aria-hidden="true" style="left:' + start.left + ';top:' + start.top
+      + ';transform:' + start.transform + '">' + asset('bus-rear') + '</div>'
+    : '';
+  return '<div class="world-back road-world"><div class="road-plane">'
+    + asset(scene.art, 'class="road-image"') + '<div class="scene-light" aria-hidden="true"></div>'
+    + bus + '<div id="road-signs"></div></div></div>';
+}
+
+function stationBackdrop(scene) {
+  return '<div class="rail-picture"><div class="road-plane">' + asset(scene.art, 'class="road-image"')
+    + '<span class="railway-name">PEBBLE BAY</span>'
+    + '<span class="station-clock"><i></i><i></i></span></div></div>';
+}
+
 function world(beat, scene) {
+  if (scene.road) return roadWorld(scene);
   const vehicle = beat.vehicle ?? scene.vehicle;
   const characters = scene.cast.map(person =>
     asset('actor-' + person.toLowerCase(), 'class="actor actor-' + person.toLowerCase() + '"')
@@ -134,9 +186,12 @@ function world(beat, scene) {
   const burst = beat.effect === 'burst' ? '<span class="burst-call">POP!</span>' : '';
   const hatch = beat.effect === 'hatch' ? '<div class="hatch-track">' + [1, 2, 3].map(index =>
     asset('turtle-walk', 'class="hatchling hatchling-' + index + '"')).join('') + '</div>' : '';
-  const backdrop = vehicle === 'moving'
-    ? '<div class="road-track">' + asset(scene.art, 'class="road-tile"') + asset(scene.art, 'class="road-tile"') + '</div>'
-    : asset(scene.art, 'class="landscape"');
+  let backdrop = asset(scene.art, 'class="landscape"');
+  if (vehicle === 'moving') {
+    backdrop = '<div class="road-track">' + asset(scene.art, 'class="road-tile"') + asset(scene.art, 'class="road-tile"') + '</div>';
+  } else if (beat.scene === 'station') {
+    backdrop = stationBackdrop(scene);
+  }
   return '<div class="world-back" aria-hidden="true">' + backdrop
     + '<div class="scene-light"></div>' + (vehicle ? '<div class="speed-lines"></div>' : '')
     + characters + bus + burst + hatch + '</div>';
@@ -152,12 +207,14 @@ function title(beat, scene) {
   const caption = '<span class="scene-time">' + escape(beat.time ?? scene.time) + '</span>'
     + '<h1 tabindex="-1" id="location-title">' + escape(scene.place) + '</h1>';
   return '<div class="location">' + caption + '</div>'
-    + (run.supplies && run.chapter >= 4 ? '<span class="kit">' + icon('supplies') + 'Gloves &amp; bags</span>' : '');
+    + (run.supplies && run.chapter >= cafeChapter ? '<span class="kit">' + icon('supplies') + 'Gloves &amp; bags</span>' : '');
 }
 
-function propSign(sign) {
+function propSign(sign, post) {
   const [description, word, direction] = signDescriptions[sign];
-  return '<div class="road-prop" role="img" aria-label="' + escape(description) + '"><div class="sign sign-' + sign + '">'
+  return '<div class="mounted-sign" role="img" aria-label="' + escape(description)
+    + '" style="--sign-x:' + post.x + '%;--sign-y:' + post.y + '%;--sign-scale:' + post.scale + '">'
+    + '<div class="sign sign-' + sign + '">'
     + (word ? '<span>' + word + '</span>' : '')
     + (direction ? '<i class="arrow arrow-' + direction + '"></i>' : '')
     + (sign === 'lights' || sign === 'green' ? '<i></i><i></i><i></i>' : '')
@@ -165,9 +222,9 @@ function propSign(sign) {
     + '</div></div>';
 }
 
-function hotspot(marker, index, mode, visited = false) {
+function hotspot(marker, index, mode, visited = false, person = '') {
   const label = marker.label;
-  return '<button type="button" class="hotspot' + (visited ? ' visited' : '') + '" data-action="' + mode
+  return '<button type="button" class="hotspot' + (visited ? ' visited' : '') + (person ? ' friend-' + person : '') + '" data-action="' + mode
     + '" data-value="' + index + '" style="--x:' + marker.x + '%;--y:' + marker.y + '%"'
     + (visited ? ' disabled' : '') + '><span class="hotspot-pin">'
     + (marker.kind ? icon(marker.kind) : '<i></i>') + '</span><span class="hotspot-name">'
@@ -175,15 +232,20 @@ function hotspot(marker, index, mode, visited = false) {
 }
 
 function sceneObjects(beat) {
-  if (beat.sign) return propSign(beat.sign);
+  if (beat.sign) return propSign(beat.sign, landmarkPosts[beat.sign]);
   if (beat.type === 'find') {
     return '<div class="hotspots">' + beat.spots.map((marker, index) =>
       hotspot(marker, index, 'spot', beat.visited?.includes(index))).join('') + '</div>';
   }
+  if (beat.type === 'search') {
+    const collection = beat.collection;
+    return '<div class="hotspots">' + collections[collection].map((item, index) =>
+      run.found[collection].includes(item.id) ? '' : hotspot(item.spot, index, 'investigate', false,
+        collection === 'friends' ? item.id : '')).join('') + '</div>';
+  }
   if (beat.scene === 'cleanup') {
-    return '<div class="hotspots">' + litter.map((item, index) => {
-      if (run.picked.includes(item.id)) return '';
-      if (beat.type === 'search') return hotspot(item.spot, index, 'investigate');
+    return '<div class="hotspots">' + collections.litter.map(item => {
+      if (run.found.litter.includes(item.id)) return '';
       return '<div class="loose-litter" aria-hidden="true" style="--x:' + item.spot.x + '%;--y:' + item.spot.y + '%">'
         + icon(item.spot.kind) + '</div>';
     }).join('') + '</div>';
@@ -218,9 +280,10 @@ function routeCards(beat) {
 }
 
 function markerChoices(beat) {
-  const markers = beat.type === 'search' ? litter.map(item => item.spot) : beat.spots;
+  const members = collections[beat.collection];
+  const markers = members ? members.map(item => item.spot) : beat.spots;
   return '<div class="spot-shortcuts">' + markers.map((item, index) => {
-    const used = beat.type === 'search' ? run.picked.includes(litter[index].id) : beat.visited?.includes(index);
+    const used = members ? run.found[beat.collection].includes(members[index].id) : beat.visited?.includes(index);
     const action = beat.type === 'search' ? 'investigate' : 'spot';
     return button(item.label, action, 'choice-button' + (used ? ' is-correct' : ''),
       'data-value="' + index + '"' + (used ? ' disabled' : ''));
@@ -236,8 +299,10 @@ function renderConsole(beat) {
   } else if (beat.type === 'find' || beat.type === 'search') {
     action = markerChoices(beat);
     if (beat.type === 'search') {
-      action += '<ul class="collect-status">' + litter.map(item =>
-        '<li class="' + (run.picked.includes(item.id) ? 'found' : '') + '">' + escape(item.done) + '</li>').join('') + '</ul>';
+      action += '<ul class="collect-status">' + collections[beat.collection].map(item => {
+        const found = run.found[beat.collection].includes(item.id);
+        return '<li class="' + (found ? 'found' : '') + '">' + escape(found ? item.done : item.spot.label) + '</li>';
+      }).join('') + '</ul>';
     }
   } else {
     action = button(beat.next, 'next', 'primary' + (beat.type === 'clip' ? ' play-next' : ''));
@@ -249,7 +314,7 @@ function renderConsole(beat) {
   return (chat ? '<header class="phone-head"><strong>Pebble Bay volunteers</strong><span>Friday evening</span></header>' + chatHistory() : '')
     + '<div class="speech">'
     + '<div class="speaker">' + portrait(beat.speaker) + '<strong>' + escape(beat.speaker) + '</strong>'
-    + (target ? button('Back to the beach', 'cancel-search', 'text-button') : '') + '</div>'
+    + (target ? button(target.collection === 'friends' ? 'Back to the station' : 'Back to the beach', 'cancel-search', 'text-button') : '') + '</div>'
     + '<p class="spoken" id="spoken" tabindex="-1">' + formattedLine(beat.text) + '</p>'
     + (beat.reading ? button('See the notice', 'notice', 'text-button see-notice') : '')
     + '<p class="feedback" id="feedback" role="status"></p>'
@@ -271,9 +336,14 @@ function play() {
   const stage = main.querySelector('#stage');
   stage.className = 'game-stage scene-' + beat.scene + (beat.notice ? ' notice-open' : '')
     + (beat.effect ? ' effect-' + beat.effect : '') + (scene.vehicle === 'moving' ? ' moving' : '')
+    + (scene.road ? ' has-road' : '')
     + (beat.visited ? ' crossing-' + beat.visited.length : '')
     + (target ? ' searching-' + target.item.id : '');
   main.querySelector('#scene-ui').innerHTML = title(beat, scene) + sceneObjects(beat);
+  if (scene.road) {
+    main.querySelector('#road-signs').innerHTML = scene.road.posts.map(post =>
+      propSign(post.sign === 'signal' ? beat.signal : post.sign, post)).join('');
+  }
   main.querySelector('#notice-panel').innerHTML = beat.notice ? noticePaper() : '';
   const consolePanel = main.querySelector('#console');
   consolePanel.className = 'console' + (beat.scene === 'phone' ? ' phone' : '');
@@ -282,6 +352,12 @@ function play() {
   if (history) history.scrollTop = history.scrollHeight;
   const activeActor = main.querySelector('.actor-' + escape(beat.speaker).toLowerCase().split(' ')[0]);
   main.querySelectorAll('.actor').forEach(actor => actor.classList.toggle('speaking', activeActor === actor));
+  if (beat.scene === 'station') {
+    const max = main.querySelector('.actor-max');
+    const carry = run.found.friends.includes('max') || (target?.item.id === 'max' && target.index === 1);
+    const src = './assets/actor-max' + (carry ? '-carry' : '') + '.webp';
+    if (max.getAttribute('src') !== src) max.src = src;
+  }
   if (beat.type === 'clip' && motion) {
     const next = consolePanel.querySelector('.play-next');
     next.setAttribute('disabled', '');
@@ -347,9 +423,11 @@ function advance() {
   if (target) {
     target.index++;
     if (target.index >= target.item.prompts.length) {
-      if (!run.picked.includes(target.item.id)) run.picked.push(target.item.id);
+      const { collection, item } = target;
+      const found = run.found[collection];
+      if (!found.includes(item.id)) found.push(item.id);
       target = null;
-      if (run.picked.length === litter.length) run.index++;
+      if (found.length === collections[collection].length) run.index++;
     }
   } else {
     const beat = currentBeat();
@@ -387,13 +465,23 @@ function choose(control, value, map = false) {
   }
   if (beat.routes === true) report('The bus gets you there around 9.50. The ranger is waiting at ten.', true);
   else if (beat.routes) report('You’ll reach the centre at about 9.54.', true);
-  else if (beat.scene === 'ride') stageTurn(beat.sign);
-  pending = window.setTimeout(advance, !motion ? 160 : beat.routes ? 970 : beat.sign === 'lights' ? 870 : 540);
+  const driveTime = moveBus(beat);
+  pending = window.setTimeout(advance, !motion ? 160 : driveTime || (beat.routes ? 970 : 540));
 }
 
-function stageTurn(sign) {
+function moveBus(beat) {
+  if (!beat.drive || !motion) return 0;
   const stage = main.querySelector('#stage');
-  stage.classList.add(sign === 'lights' ? 'braking' : 'drive-on');
+  if (beat.drive === 'stop') {
+    stage.classList.add('braking');
+    return 920;
+  }
+  const road = scenes[beat.scene].road;
+  const bus = stage.querySelector('.road-bus');
+  const path = road.tracks[beat.drive];
+  stage.classList.add('turning');
+  bus.animate([road.start, ...path].map(roadPosition), { duration: 1320, easing: 'ease-in-out', fill: 'forwards' });
+  return 1330;
 }
 
 function navigateChapter(index) {
@@ -401,8 +489,8 @@ function navigateChapter(index) {
   target = null;
   run.chapter = index;
   run.index = 0;
-  run.picked = [];
-  run.supplies = index > 4;
+  run.found = { friends: [], litter: [] };
+  run.supplies = index > cafeChapter;
   screen = 'quest';
   save();
   render(true);
@@ -414,7 +502,10 @@ function updateMotion(active) {
   const control = document.querySelector('[data-action="motion"]');
   control.textContent = motion ? 'Pause motion' : 'Play motion';
   control.setAttribute('aria-pressed', String(!motion));
-  if (!motion) main.querySelector('.play-next')?.removeAttribute('disabled');
+  if (!motion) {
+    main.querySelector('.play-next')?.removeAttribute('disabled');
+    main.querySelector('.road-bus')?.getAnimations().forEach(animation => animation.finish());
+  }
 }
 
 function fillKey() {
@@ -422,14 +513,15 @@ function fillKey() {
     'Learners can reopen the notice during the quest.',
     'Walking from the station would take until 10.10. The 9.30 bus was due at the centre at about 9.50.',
     'Take the diversion, go straight at the first lights, then turn left into Station Road at the lights after the supermarket.',
-    'Board at the station, read the signs and stop safely near Pine Café when the tyre bursts.',
+    'At the railway station, find the three friends. Compare wear a helmet while cycling with carry a helmet in your hand.',
+    'Follow each sign in its street scene. Take the right fork into Beech Street and stay on the main road when the side street is blocked.',
     'Collect the gloves and bags. Walk from the café with the adults at 9.46 and reach the centre at about 9.54.',
     'Pavement, zebra crossing, rescue centre, then the path to the beach. Send the bus driver the parking information.',
     'Pick up the bottle with gloves on. Tell the ranger about the bag behind the rope.',
   ];
   document.querySelector('#teacher-content').innerHTML = '<p>British English · A2–A2+. Ask learners to say each answer aloud before clicking, especially in the dialogues and at the road signs.</p>'
     + chapters.map((chapter, index) => {
-      const steps = chapter.steps.flatMap(beat => beat.type === 'search' ? litter.flatMap(item => item.prompts) : [beat]);
+      const steps = chapter.steps.flatMap(beat => beat.type === 'search' ? collections[beat.collection].flatMap(item => item.prompts) : [beat]);
       const entries = steps.filter(beat => beat.type === 'pick' || beat.type === 'find').map(beat => {
         const answer = beat.options?.[beat.answer] ?? beat.spots[beat.answer].label;
         const response = beat.text.includes('{}') ? beat.text.replace('{}', answer) : answer;
@@ -465,11 +557,14 @@ document.addEventListener('click', event => {
     case 'spot':
       choose(control, value, true);
       break;
-    case 'investigate':
-      if (locked || run.picked.includes(litter[value].id)) break;
-      target = { item: litter[value], index: 0 };
+    case 'investigate': {
+      const collection = chapterBeat().collection;
+      const item = collections[collection]?.[value];
+      if (locked || !item || run.found[collection].includes(item.id)) break;
+      target = { item, collection, index: 0 };
       render(true);
       break;
+    }
     case 'cancel-search':
       target = null;
       render(true);
