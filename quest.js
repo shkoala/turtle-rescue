@@ -58,6 +58,21 @@ const crossSpots = [
   spot('Rescue centre', 40, 42), spot('Path to the beach', 76, 50),
 ];
 
+const stationDialogue = {
+  type: 'order', scene: 'warden', text: 'Put the dialogue in order.', next: 'Go to the station',
+  shuffled: [3, 6, 1, 5, 0, 7, 2, 4],
+  lines: [
+    { speaker: 'Mum', text: 'Excuse me. Do you know where the station is?', hint: 'Start with a polite question about the station.' },
+    { speaker: 'Traffic warden', text: 'Yes. Go past the supermarket to the next set of traffic lights.', hint: 'The warden says where to go first.' },
+    { speaker: 'Mum', text: 'Do I turn right at the traffic lights?', hint: 'Mum asks which way to turn after she hears about the lights.' },
+    { speaker: 'Traffic warden', text: 'No, turn left into Station Road. The station is on your right, opposite the sports centre.', hint: 'Find the answer to “Do I turn right?”' },
+    { speaker: 'Mum', text: 'Left into Station Road. Got it. Is it far?', hint: 'Mum repeats the turning and asks how far it is.' },
+    { speaker: 'Traffic warden', text: 'Not really. It’s only a couple of minutes from here.', hint: 'Find the answer to “Is it far?”' },
+    { speaker: 'Mum', text: 'Thank you very much.', hint: 'Mum thanks the warden for the directions.' },
+    { speaker: 'Traffic warden', text: 'Don’t mention it.', hint: 'The warden replies to “Thank you very much.”' },
+  ],
+};
+
 export const chapters = [
   {
     name: 'The notice',
@@ -116,17 +131,7 @@ export const chapters = [
         0, 'Follow the arrow pointing straight ahead on the yellow sign.'),
       find('warden', 'Mum', 'The diversion ends here. I’ll pull into this bay and ask the traffic warden for directions.',
         [spot('Ask the traffic warden', 64, 51, 'person')], 0, ''),
-      pick('warden', 'Mum', 'Excuse me. {}', ['Is there a café around here?', 'Do you know where the station is?', 'Is it far?'],
-        1, 'Start by saying which place Mum needs to find.'),
-      say('warden', 'Traffic warden', 'Yes. Go past the supermarket to the next set of traffic lights.', 'Check the turning'),
-      pick('warden', 'Mum', '{}', ['Is it far?', 'Do I turn right at the traffic lights?', 'Can we go on foot?'],
-        1, 'Mum knows which junction to look for. Now check where to turn.'),
-      say('warden', 'Traffic warden', 'No, turn left into Station Road. The station is on your right, opposite the sports centre.', 'Ask how far it is'),
-      pick('warden', 'Mum', '{}', ['Is it far?', 'Is there a cinema near here?', 'Can I park at the centre?'],
-        0, 'Mum wants to know if the station is close.'),
-      say('warden', 'Traffic warden', 'Not really. It’s only a couple of minutes from here.', 'Thank the warden'),
-      say('warden', 'Mum', 'Thank you very much.', 'Continue'),
-      say('warden', 'Traffic warden', 'Don’t mention it.', 'Go to the station'),
+      stationDialogue,
     ],
   },
   {

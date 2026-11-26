@@ -1,4 +1,4 @@
-import { chapters, collections, notice, scenes } from './quest.js?v=car-trip';
+import { chapters, collections, notice, scenes } from './quest.js?v=dialogue-order';
 
 const main = document.querySelector('#main');
 const route = document.querySelector('#route');
@@ -6,6 +6,8 @@ const noticeDialog = document.querySelector('#notice');
 const teacherDialog = document.querySelector('#teacher-key');
 const storage = 'turtle-rescue-adventure-2';
 const priorStorage = 'turtle-rescue-adventure-1';
+const washoutChapter = chapters.findIndex(chapter => chapter.name === 'The washout');
+const wardenDialogue = chapters[washoutChapter].steps.find(beat => beat.type === 'order');
 const cafeChapter = chapters.findIndex(chapter => chapter.name === 'Pine Café');
 const portraits = new Set(['Mia', 'Leo', 'Nina', 'Alex', 'Max']);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -32,26 +34,48 @@ const landmarkPosts = {
 
 const icon = (name, className = '') => '<span class="token ' + className + ' token-' + name + '" aria-hidden="true"></span>';
 
+function emptyDialogue() {
+  return { order: [], solved: false };
+}
+
 function cleanRun() {
   return {
     chapter: 0, index: 0, unlocked: 0, started: false, finished: false, supplies: false,
-    found: { friends: [], litter: [] },
+    found: { friends: [], litter: [] }, dialogue: emptyDialogue(),
   };
+}
+
+function resumeStep(chapter, index) {
+  // Save files from the earlier dialogue can point to a line near the end.
+  return chapter === washoutChapter && Number.isInteger(index)
+    ? Math.min(index, chapters[chapter].steps.length - 1) : index;
+}
+
+function restoreDialogue(dialogue) {
+  const { order, solved } = dialogue ?? {};
+  const length = wardenDialogue.lines.length;
+  if (!Array.isArray(order) || new Set(order).size !== order.length
+    || !order.every(line => Number.isInteger(line) && line >= 0 && line < length)) {
+    return emptyDialogue();
+  }
+  return { order, solved: solved === true && order.length === length && order.every((line, index) => line === index) };
 }
 
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(storage));
-    if (saved && chapters[saved.chapter]?.steps[saved.index] && chapters[saved.unlocked]
+    const savedIndex = resumeStep(saved?.chapter, saved?.index);
+    if (saved && chapters[saved.chapter]?.steps[savedIndex] && chapters[saved.unlocked]
       && Array.isArray(saved.found?.friends) && Array.isArray(saved.found?.litter)) {
-      return saved;
+      return { ...saved, index: savedIndex, dialogue: restoreDialogue(saved.dialogue) };
     }
     const prior = JSON.parse(localStorage.getItem(priorStorage));
     if (prior && Number.isInteger(prior.chapter) && prior.chapter >= 0 && prior.chapter <= 6
       && Number.isInteger(prior.unlocked) && prior.unlocked >= prior.chapter && prior.unlocked <= 6) {
       // Earlier players who were on the bus resume at the new station scene.
       const chapter = prior.chapter > 3 ? prior.chapter + 1 : prior.chapter;
-      const index = prior.chapter !== 3 && chapters[chapter].steps[prior.index] ? prior.index : 0;
+      const step = resumeStep(chapter, prior.index);
+      const index = prior.chapter !== 3 && chapters[chapter].steps[step] ? step : 0;
       const unlocked = prior.unlocked > 3 ? prior.unlocked + 1 : prior.unlocked;
       return {
         ...cleanRun(), chapter, index, unlocked,
@@ -308,7 +332,56 @@ function markerChoices(beat) {
   }).join('') + '</div>';
 }
 
+function dialogueCards(beat) {
+  const { order, solved } = run.dialogue;
+  const card = (index, position) => {
+    const { speaker, text } = beat.lines[index];
+    const className = 'dialogue-line' + (speaker === 'Mum' ? ' mum-line' : '');
+    const content = '<span class="line-position" aria-hidden="true">' + (position || '+') + '</span>'
+      + '<span class="line-content"><strong>' + escape(speaker) + '</strong>' + escape(text) + '</span>';
+    const label = (position ? 'Return line ' + position + '. ' : 'Add line. ') + speaker + '. ' + text;
+    const moves = position && !solved ? '<div class="dialogue-moves">'
+      + button('↑', 'dialogue-up', 'line-arrow', 'aria-label="Move line ' + position + ' up"' + (position === 1 ? ' disabled' : ''))
+      + button('↓', 'dialogue-down', 'line-arrow', 'aria-label="Move line ' + position + ' down"' + (position === order.length ? ' disabled' : ''))
+      + '</div>' : '';
+    return '<li data-line="' + index + '">' + (solved ? '<div class="' + className + '">' + content + '</div>'
+      : '<button type="button" data-action="dialogue-line" data-value="' + index + '" class="' + className
+      + '" aria-label="' + escape(label) + '">' + content + '</button>') + moves + '</li>';
+  };
+  const selected = order.length ? '<ol class="dialogue-selected' + (solved ? '' : ' dialogue-editable') + '" aria-label="Your dialogue" role="list">'
+    + order.map((line, index) => card(line, index + 1)).join('') + '</ol>' : '';
+  const remaining = beat.shuffled.filter(line => !order.includes(line));
+  const bank = remaining.length ? '<ul class="dialogue-bank" aria-label="Lines to add" role="list">'
+    + remaining.map(line => card(line, 0)).join('') + '</ul>' : '';
+  return selected + bank;
+}
+
+function dialogueButtons(beat) {
+  const { order, solved } = run.dialogue;
+  if (solved) return button(beat.next, 'next');
+  return button('Check order', 'dialogue-check', 'primary', order.length < beat.lines.length ? 'disabled' : '')
+    + button('Start over', 'dialogue-reset', 'text-button', order.length ? '' : 'disabled');
+}
+
+function dialogueCount(beat) {
+  return run.dialogue.order.length + ' of ' + beat.lines.length + ' lines';
+}
+
+function renderDialogue(beat) {
+  const solved = run.dialogue.solved;
+  return '<div class="speech dialogue-task">'
+    + '<p class="spoken" id="spoken" tabindex="-1">' + escape(beat.text) + '</p>'
+    + '<p class="dialogue-help" id="dialogue-help"' + (solved ? ' hidden' : '')
+    + '>Tap the lines in order. Use the arrows to move a line or tap it to put it back.</p>'
+    + '<div id="dialogue-board" class="dialogue-board" role="region" aria-label="Dialogue lines" tabindex="0">'
+    + dialogueCards(beat) + '</div><p class="feedback' + (solved ? ' success' : '') + '" id="feedback" role="status">'
+    + (solved ? 'Dialogue complete. You can go to the station.' : '') + '</p>'
+    + '<div class="dialogue-actions"><span id="dialogue-count" role="status">' + dialogueCount(beat) + '</span>'
+    + '<div id="dialogue-buttons">' + dialogueButtons(beat) + '</div></div></div>';
+}
+
 function renderConsole(beat) {
+  if (beat.type === 'order') return renderDialogue(beat);
   let action = '';
   if (beat.type === 'pick') {
     const compact = beat.options.every(option => option.length <= 20);
@@ -356,6 +429,7 @@ function play() {
   stage.className = 'game-stage scene-' + beat.scene + (beat.notice ? ' notice-open' : '')
     + (beat.effect ? ' effect-' + beat.effect : '') + (scene.vehicle === 'moving' ? ' moving' : '')
     + (scene.road ? ' has-road' : '')
+    + (beat.type === 'order' ? ' dialogue-stage' : '')
     + (beat.visited ? ' crossing-' + beat.visited.length : '')
     + (target ? ' searching-' + target.item.id : '');
   main.querySelector('#scene-ui').innerHTML = title(beat, scene) + sceneObjects(beat);
@@ -369,7 +443,7 @@ function play() {
   consolePanel.innerHTML = renderConsole(beat);
   const history = consolePanel.querySelector('.chat-history');
   if (history) history.scrollTop = history.scrollHeight;
-  const activeActor = main.querySelector('.actor-' + escape(beat.speaker).toLowerCase().split(' ')[0]);
+  const activeActor = beat.speaker && main.querySelector('.actor-' + escape(beat.speaker).toLowerCase().split(' ')[0]);
   main.querySelectorAll('.actor').forEach(actor => actor.classList.toggle('speaking', activeActor === actor));
   if (beat.scene === 'station') {
     const max = main.querySelector('.actor-max');
@@ -453,6 +527,81 @@ function report(text, ok = false) {
   feedback.className = 'feedback ' + (ok ? 'success' : 'hint');
 }
 
+function updateDialogue(beat) {
+  const board = main.querySelector('#dialogue-board');
+  const scroll = board.scrollTop;
+  board.innerHTML = dialogueCards(beat);
+  board.scrollTop = scroll;
+  main.querySelector('#dialogue-count').textContent = dialogueCount(beat);
+  main.querySelector('#dialogue-buttons').innerHTML = dialogueButtons(beat);
+  return board;
+}
+
+function selectDialogueLine(index, keyboard) {
+  const beat = currentBeat();
+  if (beat.type !== 'order' || run.dialogue.solved || !beat.lines[index]) return;
+  const order = run.dialogue.order;
+  const position = order.indexOf(index);
+  if (position === -1) order.push(index);
+  else order.splice(position, 1);
+  save();
+  const board = updateDialogue(beat);
+  report('');
+  board.querySelector('[data-value="' + index + '"]').focus({ preventScroll: !keyboard });
+}
+
+function moveDialogueLine(control, offset) {
+  const beat = currentBeat();
+  if (beat.type !== 'order' || run.dialogue.solved) return;
+  const id = Number(control.closest('[data-line]').dataset.line);
+  const order = run.dialogue.order;
+  const position = order.indexOf(id);
+  const next = position + offset;
+  if (position < 0 || next < 0 || next >= order.length) return;
+  [order[position], order[next]] = [order[next], order[position]];
+  save();
+  const row = updateDialogue(beat).querySelector('[data-line="' + id + '"]');
+  report('');
+  const focus = row.querySelector('[data-action="' + control.dataset.action + '"]:not(:disabled)')
+    ?? row.querySelector('[data-action="dialogue-line"]');
+  focus.focus();
+}
+
+function resetDialogue() {
+  const beat = currentBeat();
+  if (beat.type !== 'order' || run.dialogue.solved) return;
+  run.dialogue = emptyDialogue();
+  save();
+  const board = updateDialogue(beat);
+  report('');
+  board.querySelector('button').focus();
+  board.scrollTop = 0;
+}
+
+function checkDialogue() {
+  const beat = currentBeat();
+  const { order, solved } = run.dialogue;
+  if (beat.type !== 'order' || solved || order.length !== beat.lines.length) return;
+  const mismatch = order.findIndex((line, index) => line !== index);
+  if (mismatch !== -1) {
+    const board = main.querySelector('#dialogue-board');
+    const line = board.querySelector('[data-value="' + order[mismatch] + '"]');
+    line.classList.add('is-wrong');
+    if (board.scrollHeight > board.clientHeight) {
+      line.focus({ preventScroll: true });
+      line.scrollIntoView({ block: 'nearest' });
+    }
+    report('Check line ' + (mismatch + 1) + '. ' + beat.lines[mismatch].hint);
+    return;
+  }
+  run.dialogue.solved = true;
+  save();
+  updateDialogue(beat).scrollTop = 0;
+  main.querySelector('#dialogue-help').hidden = true;
+  report('Dialogue complete. You can go to the station.', true);
+  main.querySelector('#dialogue-buttons [data-action="next"]').focus({ preventScroll: true });
+}
+
 function advance() {
   if (target) {
     target.index++;
@@ -524,6 +673,7 @@ function navigateChapter(index) {
   run.chapter = index;
   run.index = 0;
   run.found = { friends: [], litter: [] };
+  run.dialogue = emptyDialogue();
   run.supplies = index > cafeChapter;
   screen = 'quest';
   save();
@@ -557,7 +707,11 @@ function fillKey() {
   document.querySelector('#teacher-content').innerHTML = '<p>British English · A2–A2+. Ask learners to say each answer aloud before clicking, especially in the dialogues and at the road signs.</p>'
     + chapters.map((chapter, index) => {
       const steps = chapter.steps.flatMap(beat => beat.type === 'search' ? collections[beat.collection].flatMap(item => item.prompts) : [beat]);
-      const entries = steps.filter(beat => beat.type === 'pick' || beat.type === 'find').map(beat => {
+      const entries = steps.filter(beat => ['pick', 'find', 'order'].includes(beat.type)).map(beat => {
+        if (beat.type === 'order') {
+          return '<li>Dialogue in order<ol>' + beat.lines.map(line => '<li><strong>' + escape(line.speaker)
+            + '</strong> · ' + escape(line.text) + '</li>').join('') + '</ol></li>';
+        }
         const answer = beat.options?.[beat.answer] ?? beat.spots[beat.answer].label;
         const response = beat.text.includes('{}') ? beat.text.replace('{}', answer) : answer;
         return '<li>' + escape(response) + '</li>';
@@ -588,6 +742,19 @@ document.addEventListener('click', event => {
       break;
     case 'answer':
       choose(control, value);
+      break;
+    case 'dialogue-line':
+      selectDialogueLine(value, event.detail === 0);
+      break;
+    case 'dialogue-up':
+    case 'dialogue-down':
+      moveDialogueLine(control, action === 'dialogue-up' ? -1 : 1);
+      break;
+    case 'dialogue-reset':
+      resetDialogue();
+      break;
+    case 'dialogue-check':
+      checkDialogue();
       break;
     case 'spot':
       choose(control, value, true);
