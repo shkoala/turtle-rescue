@@ -80,7 +80,7 @@ export const chapters = [
         ['On the beach at 10 a.m.', 'At the station at 9.30 a.m.', 'At the rescue centre at 10 a.m.'],
         2, 'The notice says they’ll walk to the beach with the ranger after they meet.', { reading: true }),
       pick('town', 'Mia', 'Leo and I are 13. Can we join if Mum comes with us?',
-        ['Yes, you’re 12 or older and you’ll be with an adult.', 'Yes, children can come on their own.', 'No, everyone must be 16 or over.'],
+        ['You are older than 12 and you’ll be with an adult.', 'Yes, children can come on their own.', 'No, everyone must be 16 or over.'],
         0, 'Look at both age rules in the notice.', { reading: true }),
       say('town', 'Mia', 'Mum says she can come. I’ll send the notice to the group!', 'Open the group chat'),
     ],

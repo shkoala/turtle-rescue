@@ -1,4 +1,4 @@
-import { chapters, collections, notice, scenes } from './quest.js?v=road-scenes';
+import { chapters, collections, notice, scenes } from './quest.js?v=notice-answer';
 
 const main = document.querySelector('#main');
 const route = document.querySelector('#route');
