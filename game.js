@@ -1,4 +1,4 @@
-import { chapters, collections, notice, scenes } from './quest.js?v=notice-answer';
+import { chapters, collections, notice, scenes } from './quest.js?v=car-trip';
 
 const main = document.querySelector('#main');
 const route = document.querySelector('#route');
@@ -91,6 +91,11 @@ function asset(name, extra = '') {
   return '<img src="./assets/' + name + '.webp" alt="" ' + extra + '>';
 }
 
+function actorArt(scene, person) {
+  const pose = scene.poses?.[person];
+  return 'actor-' + person.toLowerCase() + (pose ? '-' + pose : '');
+}
+
 function warm(name) {
   if (warmed.has(name)) return;
   const picture = new Image();
@@ -105,8 +110,12 @@ function warmUpcoming() {
   for (const beat of beats) {
     const scene = scenes[beat.scene];
     warm(scene.art);
-    scene.cast.forEach(person => warm('actor-' + person.toLowerCase()));
+    scene.cast.forEach(person => warm(actorArt(scene, person)));
     if (beat.scene === 'station') warm('actor-max-carry');
+    if (beat.effect === 'pickup') {
+      warm('car-outside');
+      warm('car-steps');
+    }
     if (scene.vehicle || beat.vehicle) {
       warm('bus');
       warm('wheel');
@@ -170,11 +179,20 @@ function stationBackdrop(scene) {
     + '<span class="station-clock"><i></i><i></i></span></div></div>';
 }
 
+function carArrival(scene) {
+  const walkers = ['mia', 'leo'].map(person => '<div class="car-walker car-walker-' + person + '">'
+    + '<span class="car-stride"></span><span class="car-step-in"></span></div>').join('');
+  return '<div class="world-back" aria-hidden="true">' + asset(scene.art, 'class="landscape car-inside"')
+    + '<div class="car-pickup"><div class="car-picture">' + asset('car-outside')
+    + walkers + asset('car-outside', 'class="car-door"') + '</div></div><div class="scene-light"></div></div>';
+}
+
 function world(beat, scene) {
   if (scene.road) return roadWorld(scene);
+  if (beat.effect === 'pickup') return carArrival(scene);
   const vehicle = beat.vehicle ?? scene.vehicle;
   const characters = scene.cast.map(person =>
-    asset('actor-' + person.toLowerCase(), 'class="actor actor-' + person.toLowerCase() + '"')
+    asset(actorArt(scene, person), 'class="actor actor-' + person.toLowerCase() + '"')
   ).join('');
   const riders = vehicle && vehicle !== 'parked' ? ['mia', 'leo'].map(person =>
     '<span class="rider rider-' + person + '">' + asset('actor-' + person) + '</span>').join('') : '';
@@ -310,6 +328,7 @@ function renderConsole(beat) {
       action = '<div class="clip-controls">' + action + button('Replay', 'replay', 'text-button replay') + '</div>';
     }
   }
+  if (beat.effect === 'pickup') action += button('Replay', 'replay', 'text-button replay car-replay');
   const chat = beat.scene === 'phone';
   return (chat ? '<header class="phone-head"><strong>Pebble Bay volunteers</strong><span>Friday evening</span></header>' + chatHistory() : '')
     + '<div class="speech">'
@@ -366,7 +385,22 @@ function play() {
       pending = 0;
     }, beat.duration);
   }
+  if (beat.effect === 'pickup' && changed && motion) {
+    stage.classList.add('boarding-car');
+    pending = window.setTimeout(finishPickup, beat.duration);
+  }
   return changed;
+}
+
+function finishPickup() {
+  const stage = main.querySelector('.boarding-car');
+  if (!stage) return;
+  window.clearTimeout(pending);
+  pending = 0;
+  stage.classList.remove('boarding-car');
+  if (document.activeElement === stage.querySelector('#location-title')) {
+    stage.querySelector('#spoken').focus({ preventScroll: true });
+  }
 }
 
 function cover() {
@@ -397,7 +431,7 @@ function render(focus = false) {
     const changed = play();
     if (focus) {
       if (changed) window.scrollTo({ top: 0 });
-      const speech = main.querySelector('#spoken');
+      const speech = main.querySelector('.boarding-car #location-title') ?? main.querySelector('#spoken');
       speech.focus({ preventScroll: true });
       if (!changed && speech.getBoundingClientRect().top < 70) speech.scrollIntoView({ block: 'nearest' });
     }
@@ -503,6 +537,7 @@ function updateMotion(active) {
   control.textContent = motion ? 'Pause motion' : 'Play motion';
   control.setAttribute('aria-pressed', String(!motion));
   if (!motion) {
+    finishPickup();
     main.querySelector('.play-next')?.removeAttribute('disabled');
     main.querySelector('.road-bus')?.getAnimations().forEach(animation => animation.finish());
   }

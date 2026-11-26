@@ -12,8 +12,9 @@ const post = (sign, x, y, scale = 1) => ({ sign, x, y, scale });
 
 export const scenes = {
   town: { place: 'Pebble Bay', time: 'Friday', art: 'town', cast: ['Mia', 'Leo'] },
-  phone: { place: 'Group chat', time: 'Friday evening', art: 'town', cast: ['Mia', 'Leo'] },
+  phone: { place: 'Group chat', time: 'Friday evening', art: 'town', cast: ['Mia', 'Leo'], poses: { Mia: 'phone' } },
   ready: { place: 'Getting ready', time: 'Saturday morning', art: 'town', cast: ['Mia', 'Leo'] },
+  car: { place: 'Mum’s car', time: 'Saturday morning', art: 'car-inside', cast: [] },
   washout: { place: 'Mill Lane', time: 'Saturday morning', art: 'washed', cast: [] },
   carLights: road('Station Road diversion', 'Saturday morning', 'road-lights', null,
     [post('green', 24, 63, .86), post('diversion-ahead', 21, 71, .76)], {}),
@@ -106,8 +107,8 @@ export const chapters = [
     name: 'The washout',
     steps: [
       say('ready', 'Max', 'Dad and I are about to leave. See you at the station!', 'Get into Mum’s car'),
-      pick('ready', 'Mum', 'Before we set off, please {} your seat belts.', ['carry', 'fasten', 'take off'], 1,
-        'Fasten a seat belt means to click it into place.'),
+      pick('car', 'Mum', 'Before we set off, please {} your seat belts.', ['carry', 'fasten', 'take off'], 1,
+        'Fasten a seat belt means to click it into place.', { effect: 'pickup', duration: 4100 }),
       say('washout', 'Mum', 'Oh! The storm has washed away part of Mill Lane. We can’t take our usual road to the station.', 'Look at the diversion', { effect: 'washout' }),
       pick('washout', 'Mia', '{} at the junction. Follow the yellow diversion sign.', ['Go straight on', 'Turn right', 'Turn left'],
         2, 'Look at the arrow on the yellow sign.', { sign: 'diversion-left' }),
