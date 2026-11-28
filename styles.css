@@ -509,6 +509,7 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   text-align: center;
   z-index: 2;
 }
+.scene-centre .hotspot[data-value="0"] .hotspot-name { position: absolute; bottom: calc(100% + .24rem); }
 .hotspot-pin {
   width: 53px;
   height: 53px;
@@ -1022,6 +1023,7 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   .kit { top: auto; bottom: .7rem; right: .67rem; font-size: .75rem; }
   .scene-centre .kit { top: calc(var(--location-strip) + .4rem); bottom: auto; }
   .scene-centre .hotspots { inset: var(--location-strip) 0 0; width: auto; height: auto; transform: none; }
+  .scene-centre .hotspot[data-value="0"] { top: calc(var(--y) - .4rem); }
   .phone-head { border-radius: 0; }
   .chat-history { max-height: 7.4rem; }
   .dialogue-stage .world-back { right: 0; mask-image: none; }
