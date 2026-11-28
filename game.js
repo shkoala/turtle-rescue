@@ -1,4 +1,4 @@
-import { chapters, collections, notice, scenes } from './quest.js?v=beach-journey';
+import { chapters, collections, notice, scenes } from './quest.js?v=cafe-tyre';
 
 const main = document.querySelector('#main');
 const route = document.querySelector('#route');
@@ -178,7 +178,8 @@ function warmUpcoming() {
       warm('car-outside');
       warm('car-steps');
     }
-    if (scene.road?.start || beat.effect === 'burst') warm('bus-rear');
+    if (scene.road?.start) warm('bus-rear');
+    if (beat.effect === 'burst') ['bus', 'wheel', 'actor-mia', 'actor-leo'].forEach(warm);
     if (beat.effect === 'hatch') warm('turtle-walk');
   }
 }
@@ -253,10 +254,14 @@ function filmWorld(beat, scene) {
 }
 
 function flatTyre(scene) {
-  return '<div class="world-back road-world"><div class="road-plane">'
-    + asset(scene.art, 'class="road-image"') + '<div class="scene-light"></div>'
-    + '<div class="road-bus flat-bus" aria-hidden="true">' + asset('bus-rear') + '</div>'
-    + '<span class="burst-call" aria-hidden="true">POP!</span></div></div>';
+  const riders = ['mia', 'leo'].map(person =>
+    '<span class="rider rider-' + person + '">' + asset('actor-' + person) + '</span>').join('');
+  return '<div class="world-back" aria-hidden="true">' + asset(scene.art, 'class="landscape"')
+    + '<div class="scene-light"></div><div class="speed-lines"></div>'
+    + '<div class="vehicle vehicle-burst"><div class="vehicle-body">'
+    + asset('bus', 'class="bus-art"') + riders
+    + '<span class="bus-tyre tyre-back"></span><span class="bus-tyre tyre-front"></span>'
+    + '</div><span class="dust"></span></div><span class="burst-call">POP!</span></div>';
 }
 
 function world(beat, scene) {
@@ -857,7 +862,7 @@ function fillKey() {
     'Wear your seat belts. Turn left into Harbour Street. Go straight on at the first lights, then turn left into Station Road after the supermarket.',
     'Watch each journey. Nina gets off the train. Max rides on the cycle lane and wears a bike helmet. Alex stops, looks both ways, then crosses when it’s safe.',
     'Put the letters of push others in order. At the fork, keep right for Beech Street. Get off and wait on the pavement after the bus stops.',
-    'Ask the passer-by about Pine Café. Pick up the gloves and bags, then ask the owner for directions. Leave at 9.46 and reach the centre at about 9.54.',
+    'Ask the pedestrian about Pine Café. Pick up the gloves and bags, then ask the owner for directions. Leave at 9.46 and reach the centre at about 9.54.',
     'Walk on the pavement, cross at the zebra crossing, then meet the ranger at the rescue centre.',
     'Pick up the bottle with gloves on. Tell the ranger about the bag behind the rope.',
   ];

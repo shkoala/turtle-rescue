@@ -202,6 +202,23 @@ main { padding: 0 0 1rem; }
 .landscape { height: 100%; width: 100%; max-width: none; object-fit: cover; object-position: center 55%; animation: reveal .45s ease both; }
 .scene-town .landscape { object-position: left center; }
 .scene-phone .landscape, .scene-boarding .landscape, .scene-ready .landscape { object-position: center 54%; }
+.scene-cafe { aspect-ratio: 12 / 5; }
+.scene-cafe .view {
+  container-type: size;
+  --cafe-view-height: calc(100cqh - var(--location-strip, 0px));
+  --cafe-art-width: max(100cqw, var(--cafe-view-height) * 16 / 9);
+  --cafe-art-height: max(var(--cafe-view-height), 56.25cqw);
+  --cafe-art-left: calc((100cqw - var(--cafe-art-width)) * .42);
+  --cafe-art-top: calc((var(--cafe-view-height) - var(--cafe-art-height)) * .72);
+}
+.scene-cafe :is(.landscape, .hotspots) {
+  position: absolute;
+  inset: var(--cafe-art-top) auto auto var(--cafe-art-left);
+  width: var(--cafe-art-width);
+  height: var(--cafe-art-height);
+}
+.scene-cafe .hotspots { top: calc(var(--cafe-art-top) + var(--location-strip, 0px)); }
+.scene-cafe .location { top: 1rem; }
 .scene-centre .view { container-type: size; }
 .scene-centre .landscape { object-position: center bottom; }
 .scene-centre .hotspots {
@@ -271,8 +288,6 @@ main { padding: 0 0 1rem; }
 .scene-station .actor-max { left: 39%; bottom: 10%; height: 54%; }
 .scene-station .actor-alex { left: 47%; bottom: 9%; }
 .actor.speaking { filter: drop-shadow(0 0 7px #f4d9986f) drop-shadow(2px 7px 9px #082122a0); transform: scale(1.021); }
-.scene-cafe .actor-mia { left: 16%; height: 48%; }
-.scene-cafe .actor-leo { left: 26%; height: 46%; }
 .scene-cleanup .actor-mia { left: 6%; height: 48%; }
 .searching-bottle .actor-mia { left: 23%; bottom: 13%; }
 .searching-bag .actor-mia { left: 40%; bottom: 22%; height: 39%; }
@@ -509,7 +524,7 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   text-align: center;
   z-index: 2;
 }
-.scene-centre .hotspot[data-value="0"] .hotspot-name { position: absolute; bottom: calc(100% + .24rem); }
+:is(.scene-cafe, .scene-centre .hotspot[data-value="0"]) .hotspot-name { position: absolute; bottom: calc(100% + .24rem); }
 .hotspot-pin {
   width: 53px;
   height: 53px;
@@ -645,21 +660,6 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .film-playing .console { visibility: hidden; }
 .motion-off .scene-video { display: none; }
 .scene-ride .landscape { object-position: center 34%; }
-.scene-tyre .road-plane { width: min(100cqw, 177.778cqh); height: min(100cqh, 56.25cqw); }
-.scene-tyre .console { grid-column: 1; max-width: 34rem; }
-.flat-bus {
-  left: 88.3%;
-  top: 92%;
-  width: clamp(50px, 15.5cqw, 235px);
-  transform: translate(-50%, -100%);
-}
-.flat-bus img { animation: flat-tyre .65s ease-out both; transform-origin: 60% 100%; }
-@keyframes flat-tyre {
-  0% { transform: rotate(-2deg); }
-  40% { transform: rotate(3deg) translateY(2%); }
-  100% { transform: rotate(1.5deg) scaleY(.97); }
-}
-.scene-tyre .burst-call { left: 81%; bottom: 24%; }
 .railway-name {
   position: absolute;
   left: 64.7%;
@@ -920,7 +920,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .hatchling-2 { left: 25%; bottom: 15%; width: clamp(26px, 4.6%, 64px); animation-delay: .35s; }
 .hatchling-3 { left: 33%; bottom: 8%; width: clamp(28px, 5.2%, 68px); animation-delay: .73s; }
 .effect-hatch .landscape { animation: dusk-pan 5s ease-out both; }
-.effect-burst .console, .effect-hatch .console { animation: dialogue-in .4s .94s both; }
+.effect-burst .console { animation: dialogue-in .4s 1.6s both; }
+.effect-hatch .console { animation: dialogue-in .4s .94s both; }
 
 @keyframes reveal { from { opacity: .28; } to { opacity: 1; } }
 @keyframes discovery { from { transform: scale(1.075) translateX(1%); } to { transform: scale(1); } }
@@ -996,6 +997,11 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 @media (min-width: 801px) {
   .spot-shortcuts { display: none; }
 }
+@media (min-width: 801px) and (max-aspect-ratio: 5 / 4) {
+  .scene-cafe { display: block; min-height: 0; padding: 0; }
+  .scene-cafe .view { position: relative; aspect-ratio: 16 / 9; }
+  .scene-cafe .console { border-radius: 0; }
+}
 @media (max-width: 800px) {
   .masthead, .trail, main { width: calc(100% - 1rem); }
   .masthead { min-height: 60px; }
@@ -1012,8 +1018,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
     height: clamp(255px, 43svh, 470px);
     background: #123737;
   }
-  .has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre { --location-strip: 3.1rem; }
-  .game-stage:is(.has-road, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .view { height: calc((100vw - 1rem - 2px) * .5625 + var(--location-strip)); }
+  .has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-cafe, .scene-centre { --location-strip: 3.1rem; }
+  .game-stage:is(.has-road, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-cafe, .scene-centre) .view { height: calc((100vw - 1rem - 2px) * .5625 + var(--location-strip)); }
   .game-stage.scene-station .view { height: calc(max(214px, (100vw - 1rem - 2px) * .625) + var(--location-strip)); }
   #notice-panel { padding: .8rem; }
   .console { border-radius: 0; border: 0; border-top: 1px solid #8ecab275; box-shadow: none; }
@@ -1059,13 +1065,11 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   }
   .scene-station .hotspot-pin, .scene-station .spot-shortcuts { display: none; }
   .scene-station .hotspot-name { min-width: 44px; }
-  .scene-cafe .actor-mia { left: 9%; }
-  .scene-cafe .actor-leo { left: 23%; }
   .scene-cleanup .actor-mia { left: 6%; }
   .searching-bottle .actor-mia { left: 23%; }
   .searching-bag .actor-mia { left: 40%; }
-  .has-road .road-world, :is(.scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .world-back, .scene-station .hotspots { top: var(--location-strip); }
-  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .location {
+  .has-road .road-world, :is(.scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-cafe, .scene-centre) .world-back, .scene-station .hotspots { top: var(--location-strip); }
+  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-cafe, .scene-centre) .location {
     inset: 0 0 auto;
     display: flex;
     align-items: center;
@@ -1077,8 +1081,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
     border: 0;
     border-radius: 0;
   }
-  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .scene-time { white-space: nowrap; }
-  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .location h1 { margin: 0; font-size: clamp(1.05rem, 4.4vw, 1.85rem); }
+  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-cafe, .scene-centre) .scene-time { white-space: nowrap; }
+  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-cafe, .scene-centre) .location h1 { margin: 0; font-size: clamp(1.05rem, 4.4vw, 1.85rem); }
   .hotspot-pin { height: 39px; width: 39px; }
   .hotspot-name { padding: .23rem .4rem; font-size: .71rem; }
   .hotspot-pin > i { width: 11px; height: 11px; }
