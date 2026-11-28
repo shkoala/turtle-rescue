@@ -202,7 +202,7 @@ main { padding: 0 0 1rem; }
 .landscape { height: 100%; width: 100%; max-width: none; object-fit: cover; object-position: center 55%; animation: reveal .45s ease both; }
 .scene-town .landscape { object-position: left center; }
 .scene-phone .landscape, .scene-boarding .landscape, .scene-ready .landscape { object-position: center 54%; }
-.scene-cafe { aspect-ratio: 12 / 5; }
+.scene-cafe { width: 100%; aspect-ratio: 12 / 5; }
 .scene-cafe .view {
   container-type: size;
   --cafe-view-height: calc(100cqh - var(--location-strip, 0px));
@@ -524,7 +524,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   text-align: center;
   z-index: 2;
 }
-:is(.scene-cafe, .scene-centre .hotspot[data-value="0"]) .hotspot-name { position: absolute; bottom: calc(100% + .24rem); }
+.scene-cafe .hotspot-name,
+.scene-centre .hotspot[data-value="0"] .hotspot-name { position: absolute; bottom: calc(100% + .24rem); }
 .hotspot-pin {
   width: 53px;
   height: 53px;
@@ -862,7 +863,7 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .rider-leo { left: 29%; }
 .vehicle-moving { animation: bus-arrive 1.35s cubic-bezier(.18,.8,.4,1) both; }
 .vehicle-moving .vehicle-body { animation: bus-suspension .48s ease-in-out infinite alternate; }
-.vehicle-burst { transform-origin: 21% 87%; animation: tyre-stop 1.6s cubic-bezier(.21,.8,.45,1) both; }
+.vehicle-burst { left: 8%; transform-origin: 21% 87%; animation: tyre-stop 1.6s cubic-bezier(.21,.8,.45,1) both; }
 .vehicle-parked { left: 4%; bottom: 2%; width: min(29%, 440px); }
 .bus-tyre {
   position: absolute;
@@ -998,7 +999,7 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   .spot-shortcuts { display: none; }
 }
 @media (min-width: 801px) and (max-aspect-ratio: 5 / 4) {
-  .scene-cafe { display: block; min-height: 0; padding: 0; }
+  .scene-cafe { display: block; aspect-ratio: auto; min-height: 0; padding: 0; }
   .scene-cafe .view { position: relative; aspect-ratio: 16 / 9; }
   .scene-cafe .console { border-radius: 0; }
 }
@@ -1012,6 +1013,7 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   .trail { margin-bottom: .53rem; }
   .trail ol { padding: .15rem; }
   .game-stage { display: block; min-height: auto; padding: 0; border-radius: 12px; }
+  .scene-cafe { aspect-ratio: auto; }
   .view {
     z-index: 0;
     position: relative;
