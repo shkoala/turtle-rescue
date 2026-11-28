@@ -1,14 +1,16 @@
-import { chapters, collections, notice, scenes } from './quest.js?v=dialogue-order';
+import { chapters, collections, notice, scenes } from './quest.js?v=beach-journey';
 
 const main = document.querySelector('#main');
 const route = document.querySelector('#route');
 const noticeDialog = document.querySelector('#notice');
 const teacherDialog = document.querySelector('#teacher-key');
-const storage = 'turtle-rescue-adventure-2';
+const storage = 'turtle-rescue-adventure-3';
+const previousStorage = 'turtle-rescue-adventure-2';
 const priorStorage = 'turtle-rescue-adventure-1';
 const washoutChapter = chapters.findIndex(chapter => chapter.name === 'The washout');
-const wardenDialogue = chapters[washoutChapter].steps.find(beat => beat.type === 'order');
+const stationChapter = chapters.findIndex(chapter => chapter.name === 'The station');
 const cafeChapter = chapters.findIndex(chapter => chapter.name === 'Pine Café');
+const crossingChapter = chapters.findIndex(chapter => chapter.name === 'The crossing');
 const portraits = new Set(['Mia', 'Leo', 'Nina', 'Alex', 'Max']);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const warmed = new Map();
@@ -23,65 +25,97 @@ const signDescriptions = {
   'no-entry': ['Red circle with a white horizontal bar'],
   lights: ['Traffic lights with the top, red light on'],
   green: ['Traffic lights with the bottom, green light on'],
-  'no-parking': ['Blue circle with a red border and red diagonal line'],
-  parking: ['White P on blue, with a plate for bus parking', 'P'],
 };
 const landmarkPosts = {
   'diversion-left': { x: 42, y: 69, scale: .9 },
-  'no-parking': { x: 25, y: 63, scale: .78 },
-  parking: { x: 20, y: 83, scale: .95 },
 };
 
 const icon = (name, className = '') => '<span class="token ' + className + ' token-' + name + '" aria-hidden="true"></span>';
 
-function emptyDialogue() {
-  return { order: [], solved: false };
+function emptyTask(id = '') {
+  return { id, order: [], solved: false };
 }
 
 function cleanRun() {
   return {
     chapter: 0, index: 0, unlocked: 0, started: false, finished: false, supplies: false,
-    found: { friends: [], litter: [] }, dialogue: emptyDialogue(),
+    found: { friends: [], litter: [] }, task: emptyTask(),
   };
 }
 
-function resumeStep(chapter, index) {
-  // Save files from the earlier dialogue can point to a line near the end.
-  return chapter === washoutChapter && Number.isInteger(index)
-    ? Math.min(index, chapters[chapter].steps.length - 1) : index;
+function taskSize(beat) {
+  return beat.type === 'tiles' ? beat.tokens.length : beat.lines.length;
 }
 
-function restoreDialogue(dialogue) {
-  const { order, solved } = dialogue ?? {};
-  const length = wardenDialogue.lines.length;
+function matchesTask(beat, order) {
+  return order.length === taskSize(beat) && order.every((token, index) =>
+    beat.type === 'tiles' ? beat.tokens[token] === beat.tokens[index] : token === index);
+}
+
+function resumeTask(beat, state) {
+  if (state?.id !== beat.id) return emptyTask(beat.id);
+  const { order, solved } = state;
+  const length = taskSize(beat);
   if (!Array.isArray(order) || new Set(order).size !== order.length
     || !order.every(line => Number.isInteger(line) && line >= 0 && line < length)) {
-    return emptyDialogue();
+    return emptyTask(beat.id);
   }
-  return { order, solved: solved === true && order.length === length && order.every((line, index) => line === index) };
+  return { id: beat.id, order, solved: solved === true && matchesTask(beat, order) };
+}
+
+function updateOldProgress(saved) {
+  let { chapter, index, unlocked } = saved;
+  const found = { ...saved.found };
+  if (chapter === washoutChapter) index = Math.min(index, 6);
+  if (chapter === stationChapter) {
+    index = Math.min(index, 1);
+    found.friends = [];
+  }
+  if (chapter === cafeChapter - 1 && index >= 16) {
+    chapter = cafeChapter;
+    unlocked = Math.max(unlocked, cafeChapter);
+    index = 0;
+  } else if (chapter === cafeChapter && index >= 3) {
+    index = saved.supplies ? (index >= 12 ? chapters[cafeChapter].steps.length - 1 : 3) : 2;
+  } else if (chapter === crossingChapter) {
+    index = index >= 6 ? index - 3 : Math.max(0, index - 4);
+  }
+  const { dialogue, ...old } = saved;
+  const warden = chapters[washoutChapter].steps.at(-1);
+  return {
+    ...cleanRun(), ...old, chapter, index, unlocked, found,
+    task: resumeTask(warden, { id: warden.id, ...dialogue }),
+  };
+}
+
+function hasProgress(saved) {
+  return saved && Number.isInteger(saved.chapter) && chapters[saved.chapter] && chapters[saved.unlocked]
+    && Number.isInteger(saved.index) && saved.index >= 0
+    && Array.isArray(saved.found?.friends) && Array.isArray(saved.found?.litter);
 }
 
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(storage));
-    const savedIndex = resumeStep(saved?.chapter, saved?.index);
-    if (saved && chapters[saved.chapter]?.steps[savedIndex] && chapters[saved.unlocked]
-      && Array.isArray(saved.found?.friends) && Array.isArray(saved.found?.litter)) {
-      return { ...saved, index: savedIndex, dialogue: restoreDialogue(saved.dialogue) };
+    if (hasProgress(saved) && chapters[saved.chapter].steps[saved.index]) return saved;
+    const previous = JSON.parse(localStorage.getItem(previousStorage));
+    if (hasProgress(previous)) {
+      const restored = updateOldProgress(previous);
+      if (chapters[restored.chapter].steps[restored.index]) return restored;
     }
     const prior = JSON.parse(localStorage.getItem(priorStorage));
     if (prior && Number.isInteger(prior.chapter) && prior.chapter >= 0 && prior.chapter <= 6
       && Number.isInteger(prior.unlocked) && prior.unlocked >= prior.chapter && prior.unlocked <= 6) {
       // Earlier players who were on the bus resume at the new station scene.
       const chapter = prior.chapter > 3 ? prior.chapter + 1 : prior.chapter;
-      const step = resumeStep(chapter, prior.index);
-      const index = prior.chapter !== 3 && chapters[chapter].steps[step] ? step : 0;
+      const index = prior.chapter !== 3 && Number.isInteger(prior.index) && prior.index >= 0 ? prior.index : 0;
       const unlocked = prior.unlocked > 3 ? prior.unlocked + 1 : prior.unlocked;
-      return {
+      const restored = updateOldProgress({
         ...cleanRun(), chapter, index, unlocked,
         started: Boolean(prior.started), finished: Boolean(prior.finished), supplies: Boolean(prior.supplies),
         found: { friends: [], litter: Array.isArray(prior.picked) ? prior.picked : [] },
-      };
+      });
+      if (chapters[restored.chapter].steps[restored.index]) return restored;
     }
   } catch {
     // Start a new run if saved data cannot be read.
@@ -129,22 +163,22 @@ function warm(name) {
 }
 
 function warmUpcoming() {
-  const beats = chapters[run.chapter].steps.slice(run.index, run.index + 4);
+  const beats = target ? target.item.prompts.slice(target.index, target.index + 4)
+    : chapters[run.chapter].steps.slice(run.index, run.index + 4);
   if (beats.length < 4 && chapters[run.chapter + 1]) beats.push(chapters[run.chapter + 1].steps[0]);
   for (const beat of beats) {
     const scene = scenes[beat.scene];
     warm(scene.art);
     scene.cast.forEach(person => warm(actorArt(scene, person)));
     if (beat.scene === 'station') warm('actor-max-carry');
+    if (beat.collection === 'friends') {
+      collections.friends.forEach(friend => warm(scenes[friend.prompts[0].scene].art));
+    }
     if (beat.effect === 'pickup') {
       warm('car-outside');
       warm('car-steps');
     }
-    if (scene.vehicle || beat.vehicle) {
-      warm('bus');
-      warm('wheel');
-    }
-    if (scene.road?.start) warm('bus-rear');
+    if (scene.road?.start || beat.effect === 'burst') warm('bus-rear');
     if (beat.effect === 'hatch') warm('turtle-walk');
   }
 }
@@ -211,32 +245,33 @@ function carArrival(scene) {
     + walkers + asset('car-outside', 'class="car-door"') + '</div></div><div class="scene-light"></div></div>';
 }
 
+function filmWorld(beat, scene) {
+  const still = asset(scene.art, 'class="journey-media"');
+  const movie = beat.type === 'clip' ? '<video class="journey-media scene-video" autoplay muted playsinline'
+    + ' preload="auto" poster="./assets/' + scene.art + '.webp" src="./assets/' + scene.video + '.mp4"></video>' : '';
+  return '<div class="world-back journey-world" aria-hidden="true">' + still + movie + '<div class="scene-light"></div></div>';
+}
+
+function flatTyre(scene) {
+  return '<div class="world-back road-world"><div class="road-plane">'
+    + asset(scene.art, 'class="road-image"') + '<div class="scene-light"></div>'
+    + '<div class="road-bus flat-bus" aria-hidden="true">' + asset('bus-rear') + '</div>'
+    + '<span class="burst-call" aria-hidden="true">POP!</span></div></div>';
+}
+
 function world(beat, scene) {
   if (scene.road) return roadWorld(scene);
   if (beat.effect === 'pickup') return carArrival(scene);
-  const vehicle = beat.vehicle ?? scene.vehicle;
+  if (beat.effect === 'burst') return flatTyre(scene);
+  if (scene.video) return filmWorld(beat, scene);
   const characters = scene.cast.map(person =>
     asset(actorArt(scene, person), 'class="actor actor-' + person.toLowerCase() + '"')
   ).join('');
-  const riders = vehicle && vehicle !== 'parked' ? ['mia', 'leo'].map(person =>
-    '<span class="rider rider-' + person + '">' + asset('actor-' + person) + '</span>').join('') : '';
-  const bus = vehicle ? '<div class="vehicle vehicle-' + vehicle + '"><div class="vehicle-body">'
-    + asset('bus', 'class="bus-art"')
-    + riders
-    + '<span class="bus-tyre tyre-back"></span><span class="bus-tyre tyre-front"></span>'
-    + '</div><span class="dust"></span></div>' : '';
-  const burst = beat.effect === 'burst' ? '<span class="burst-call">POP!</span>' : '';
   const hatch = beat.effect === 'hatch' ? '<div class="hatch-track">' + [1, 2, 3].map(index =>
     asset('turtle-walk', 'class="hatchling hatchling-' + index + '"')).join('') + '</div>' : '';
-  let backdrop = asset(scene.art, 'class="landscape"');
-  if (vehicle === 'moving') {
-    backdrop = '<div class="road-track">' + asset(scene.art, 'class="road-tile"') + asset(scene.art, 'class="road-tile"') + '</div>';
-  } else if (beat.scene === 'station') {
-    backdrop = stationBackdrop(scene);
-  }
+  const backdrop = beat.scene === 'station' ? stationBackdrop(scene) : asset(scene.art, 'class="landscape"');
   return '<div class="world-back" aria-hidden="true">' + backdrop
-    + '<div class="scene-light"></div>' + (vehicle ? '<div class="speed-lines"></div>' : '')
-    + characters + bus + burst + hatch + '</div>';
+    + '<div class="scene-light"></div>' + characters + hatch + '</div>';
 }
 
 function portrait(name) {
@@ -260,7 +295,6 @@ function propSign(sign, post) {
     + (word ? '<span>' + word + '</span>' : '')
     + (direction ? '<i class="arrow arrow-' + direction + '"></i>' : '')
     + (sign === 'lights' || sign === 'green' ? '<i></i><i></i><i></i>' : '')
-    + (sign === 'parking' ? '<small>Bus parking</small>' : '')
     + '</div></div>';
 }
 
@@ -305,18 +339,16 @@ function noticePaper() {
   return '<article class="paper"><h2>Help us clean Turtle Beach!</h2>' + notice.map(p => '<p>' + p + '</p>').join('') + '</article>';
 }
 
-function chatHistory() {
-  const messages = chapters[1].steps.slice(0, run.index).filter(item => !item.routes);
+function chatHistory(chapter, include) {
+  const messages = chapters[chapter].steps.slice(0, run.index).filter(include);
   if (!messages.length) return '';
   return '<div class="chat-history" aria-label="Earlier messages">' + messages.map(item =>
     '<div class="chat-entry">' + portrait(item.speaker) + '<p><strong>' + escape(item.speaker)
-    + '</strong>' + formattedLine(item.text, item.options?.[item.answer]) + '</p></div>').join('') + '</div>';
+    + '</strong>' + formattedLine(item.text, item.type === 'tiles' ? item.answer : item.options?.[item.answer])
+    + '</p></div>').join('') + '</div>';
 }
 
-function routeCards(beat) {
-  if (beat.routes === 'cafe') {
-    return '<div class="route-cards"><p><strong>Leave Pine Café</strong>9.46 a.m.</p><p><strong>Meet the ranger</strong>10 a.m.</p></div>';
-  }
+function routeCards() {
   return '<div class="route-cards"><p><strong>Walk from the station</strong>9.25 a.m. · 45 minutes</p>'
     + '<p><strong>Volunteer bus</strong>9.30 a.m. · About 20 minutes with the café stop</p></div>';
 }
@@ -333,13 +365,13 @@ function markerChoices(beat) {
 }
 
 function dialogueCards(beat) {
-  const { order, solved } = run.dialogue;
+  const { order, solved } = run.task;
   const card = (index, position) => {
     const { speaker, text } = beat.lines[index];
     const className = 'dialogue-line' + (speaker === 'Mum' ? ' mum-line' : '');
     const content = '<span class="line-position" aria-hidden="true">' + (position || '+') + '</span>'
-      + '<span class="line-content"><strong>' + escape(speaker) + '</strong>' + escape(text) + '</span>';
-    const label = (position ? 'Return line ' + position + '. ' : 'Add line. ') + speaker + '. ' + text;
+      + '<span class="line-content">' + (speaker ? '<strong>' + escape(speaker) + '</strong>' : '') + escape(text) + '</span>';
+    const label = (position ? 'Return line ' + position + '. ' : 'Add line. ') + (speaker ? speaker + '. ' : '') + text;
     const moves = position && !solved ? '<div class="dialogue-moves">'
       + button('↑', 'dialogue-up', 'line-arrow', 'aria-label="Move line ' + position + ' up"' + (position === 1 ? ' disabled' : ''))
       + button('↓', 'dialogue-down', 'line-arrow', 'aria-label="Move line ' + position + ' down"' + (position === order.length ? ' disabled' : ''))
@@ -357,36 +389,95 @@ function dialogueCards(beat) {
 }
 
 function dialogueButtons(beat) {
-  const { order, solved } = run.dialogue;
+  const { order, solved } = run.task;
   if (solved) return button(beat.next, 'next');
   return button('Check order', 'dialogue-check', 'primary', order.length < beat.lines.length ? 'disabled' : '')
     + button('Start over', 'dialogue-reset', 'text-button', order.length ? '' : 'disabled');
 }
 
 function dialogueCount(beat) {
-  return run.dialogue.order.length + ' of ' + beat.lines.length + ' lines';
+  return run.task.order.length + ' of ' + beat.lines.length + (beat.id === 'warden' ? ' lines' : ' steps');
 }
 
 function renderDialogue(beat) {
-  const solved = run.dialogue.solved;
+  const solved = run.task.solved;
   return '<div class="speech dialogue-task">'
     + '<p class="spoken" id="spoken" tabindex="-1">' + escape(beat.text) + '</p>'
     + '<p class="dialogue-help" id="dialogue-help"' + (solved ? ' hidden' : '')
-    + '>Tap the lines in order. Use the arrows to move a line or tap it to put it back.</p>'
+    + '>Tap in order. Use the arrows to move a card. Tap it again to put it back.</p>'
     + '<div id="dialogue-board" class="dialogue-board" role="region" aria-label="Dialogue lines" tabindex="0">'
     + dialogueCards(beat) + '</div><p class="feedback' + (solved ? ' success' : '') + '" id="feedback" role="status">'
-    + (solved ? 'Dialogue complete. You can go to the station.' : '') + '</p>'
+    + (solved ? 'That’s the right order.' : '') + '</p>'
     + '<div class="dialogue-actions"><span id="dialogue-count" role="status">' + dialogueCount(beat) + '</span>'
     + '<div id="dialogue-buttons">' + dialogueButtons(beat) + '</div></div></div>';
 }
 
+function tileGuess(beat) {
+  const selected = run.task.order.map(index => beat.tokens[index]);
+  if (!beat.letters) return selected.join(' ');
+  const letters = selected.join('');
+  let offset = 0;
+  return beat.answer.split(' ').map(word => {
+    const part = letters.slice(offset, offset + word.length);
+    offset += word.length;
+    return part;
+  }).join(' ').trim();
+}
+
+function tileCards(beat) {
+  const { order, solved } = run.task;
+  if (solved) return button('Continue', 'next');
+  const shuffled = beat.tokens.map((_, index) => index);
+  let seed = beat.id.length;
+  for (let end = shuffled.length - 1; end > 0; end--) {
+    seed = (seed * 73 + 41) % 997;
+    const other = seed % (end + 1);
+    [shuffled[end], shuffled[other]] = [shuffled[other], shuffled[end]];
+  }
+  if (matchesTask(beat, shuffled)) shuffled.push(shuffled.shift());
+  const card = (index, selected) => button(beat.tokens[index], 'tile',
+    'tile' + (selected ? ' tile-selected' : ''), 'data-value="' + index + '" aria-pressed="' + selected + '"');
+  const unchosen = shuffled.filter(index => !order.includes(index));
+  const row = order.length ? '<div class="tile-row tile-answer" aria-label="Your answer">'
+    + order.map(index => card(index, true)).join('') + '</div>' : '';
+  return row + '<div class="tile-row" aria-label="Available tiles">' + unchosen.map(index => card(index, false)).join('') + '</div>'
+    + '<div class="tile-actions">' + button('Check', 'tile-check', 'primary', unchosen.length ? 'disabled' : '')
+    + button('Start over', 'tile-reset', 'text-button', order.length ? '' : 'disabled') + '</div>';
+}
+
+function speakerLine(beat) {
+  return '<div class="speaker">' + portrait(beat.speaker) + '<strong>' + escape(beat.speaker) + '</strong>'
+    + (target ? button(target.collection === 'friends' ? 'Back to the station' : 'Back to the beach', 'cancel-search', 'text-button') : '')
+    + '</div>';
+}
+
+function renderTiles(beat) {
+  return (beat.scene === 'cafe' ? chatHistory(cafeChapter, item => item.type === 'tiles') : '')
+    + '<div class="speech tile-task' + (run.task.solved ? ' tile-solved' : '') + '">' + speakerLine(beat)
+    + '<p id="spoken" class="spoken" tabindex="-1">' + formattedLine(beat.text, tileGuess(beat)) + '</p>'
+    + '<p class="tile-help" id="tile-help"' + (run.task.solved ? ' hidden' : '') + '>Put the '
+    + (beat.letters ? 'letters' : 'words') + ' in order.</p>'
+    + '<p class="feedback" id="feedback" role="status"></p>'
+    + '<div id="tile-controls">' + tileCards(beat) + '</div></div>';
+}
+
 function renderConsole(beat) {
   if (beat.type === 'order') return renderDialogue(beat);
+  if (beat.type === 'tiles') return renderTiles(beat);
   let action = '';
+  let line = formattedLine(beat.text);
   if (beat.type === 'pick') {
     const compact = beat.options.every(option => option.length <= 20);
-    action = (beat.routes ? routeCards(beat) : '') + '<div class="choices' + (compact ? ' choices-short' : '') + '" aria-label="Choose your reply">'
+    action = (beat.routes ? routeCards() : '') + '<div class="choices' + (compact ? ' choices-short' : '') + '" aria-label="Choose your reply">'
       + beat.options.map((reply, index) => button(reply, 'answer', 'choice-button', 'data-value="' + index + '"')).join('') + '</div>';
+  } else if (beat.type === 'select') {
+    const select = '<select id="word-select" aria-label="Choose the missing word"><option value="" selected disabled>Choose</option>'
+      + beat.options.map((option, index) => '<option value="' + index + '">' + escape(option) + '</option>').join('') + '</select>';
+    line = escape(beat.text).replace('{}', select);
+  } else if (beat.type === 'input') {
+    const input = '<input name="word" id="word-input" required maxlength="30" autocomplete="off" spellcheck="false" aria-label="Missing word">';
+    line = escape(beat.text).replace('{}', input);
+    action = '<button type="submit" form="word-form" class="primary">Check</button>';
   } else if (beat.type === 'find' || beat.type === 'search') {
     action = markerChoices(beat);
     if (beat.type === 'search') {
@@ -397,17 +488,18 @@ function renderConsole(beat) {
     }
   } else {
     action = button(beat.next, 'next', 'primary' + (beat.type === 'clip' ? ' play-next' : ''));
-    if (beat.effect === 'burst' || beat.effect === 'hatch') {
+    if (beat.effect === 'burst' || beat.effect === 'hatch' || scenes[beat.scene].video) {
       action = '<div class="clip-controls">' + action + button('Replay', 'replay', 'text-button replay') + '</div>';
     }
   }
   if (beat.effect === 'pickup') action += button('Replay', 'replay', 'text-button replay car-replay');
   const chat = beat.scene === 'phone';
-  return (chat ? '<header class="phone-head"><strong>Pebble Bay volunteers</strong><span>Friday evening</span></header>' + chatHistory() : '')
+  const sentence = '<p class="spoken" id="spoken" tabindex="-1">' + line + '</p>';
+  return (chat ? '<header class="phone-head"><strong>Pebble Bay volunteers</strong><span>Friday evening</span></header>'
+    + chatHistory(1, item => !item.routes) : '')
     + '<div class="speech">'
-    + '<div class="speaker">' + portrait(beat.speaker) + '<strong>' + escape(beat.speaker) + '</strong>'
-    + (target ? button(target.collection === 'friends' ? 'Back to the station' : 'Back to the beach', 'cancel-search', 'text-button') : '') + '</div>'
-    + '<p class="spoken" id="spoken" tabindex="-1">' + formattedLine(beat.text) + '</p>'
+    + speakerLine(beat)
+    + (beat.type === 'input' ? '<form id="word-form">' + sentence + '</form>' : sentence)
     + (beat.reading ? button('See the notice', 'notice', 'text-button see-notice') : '')
     + '<p class="feedback" id="feedback" role="status"></p>'
     + action + '</div>';
@@ -416,8 +508,9 @@ function renderConsole(beat) {
 function play() {
   warmUpcoming();
   const beat = currentBeat();
+  if (beat.type === 'order' || beat.type === 'tiles') run.task = resumeTask(beat, run.task);
   const scene = scenes[beat.scene];
-  const shot = [beat.scene, beat.effect ?? '', beat.vehicle ?? ''].join('/');
+  const shot = [beat.scene, beat.effect ?? '', scene.video && beat.type === 'clip' ? 'film' : ''].join('/');
   const changed = shot !== renderedShot;
   if (changed) {
     main.innerHTML = '<section class="game-stage" id="stage"><div class="view" id="view">'
@@ -427,7 +520,7 @@ function play() {
   }
   const stage = main.querySelector('#stage');
   stage.className = 'game-stage scene-' + beat.scene + (beat.notice ? ' notice-open' : '')
-    + (beat.effect ? ' effect-' + beat.effect : '') + (scene.vehicle === 'moving' ? ' moving' : '')
+    + (beat.effect ? ' effect-' + beat.effect : '') + (scene.video ? ' journey-stage' : '')
     + (scene.road ? ' has-road' : '')
     + (beat.type === 'order' ? ' dialogue-stage' : '')
     + (beat.visited ? ' crossing-' + beat.visited.length : '')
@@ -447,17 +540,32 @@ function play() {
   main.querySelectorAll('.actor').forEach(actor => actor.classList.toggle('speaking', activeActor === actor));
   if (beat.scene === 'station') {
     const max = main.querySelector('.actor-max');
-    const carry = run.found.friends.includes('max') || (target?.item.id === 'max' && target.index === 1);
+    const carry = run.found.friends.includes('max') || target?.item.id === 'max';
     const src = './assets/actor-max' + (carry ? '-carry' : '') + '.webp';
     if (max.getAttribute('src') !== src) max.src = src;
   }
   if (beat.type === 'clip' && motion) {
     const next = consolePanel.querySelector('.play-next');
     next.setAttribute('disabled', '');
-    pending = window.setTimeout(() => {
-      next.removeAttribute('disabled');
+    const finish = () => {
+      if (!next.isConnected) return;
+      window.clearTimeout(pending);
       pending = 0;
-    }, beat.duration);
+      next.removeAttribute('disabled');
+      stage.classList.remove('film-playing');
+      if (document.activeElement === stage.querySelector('#location-title')) {
+        stage.querySelector('#spoken').focus({ preventScroll: true });
+      }
+    };
+    const film = stage.querySelector('.scene-video');
+    if (film) {
+      stage.classList.add('film-playing');
+      film.addEventListener('ended', finish, { once: true });
+      film.addEventListener('error', finish, { once: true });
+    }
+    pending = window.setTimeout(finish, beat.duration + (film ? 1800 : 0));
+  } else {
+    stage.querySelector('.scene-video')?.pause();
   }
   if (beat.effect === 'pickup' && changed && motion) {
     stage.classList.add('boarding-car');
@@ -505,7 +613,7 @@ function render(focus = false) {
     const changed = play();
     if (focus) {
       if (changed) window.scrollTo({ top: 0 });
-      const speech = main.querySelector('.boarding-car #location-title') ?? main.querySelector('#spoken');
+      const speech = main.querySelector(':is(.boarding-car, .film-playing) #location-title') ?? main.querySelector('#spoken');
       speech.focus({ preventScroll: true });
       if (!changed && speech.getBoundingClientRect().top < 70) speech.scrollIntoView({ block: 'nearest' });
     }
@@ -539,8 +647,8 @@ function updateDialogue(beat) {
 
 function selectDialogueLine(index, keyboard) {
   const beat = currentBeat();
-  if (beat.type !== 'order' || run.dialogue.solved || !beat.lines[index]) return;
-  const order = run.dialogue.order;
+  if (beat.type !== 'order' || run.task.solved || !beat.lines[index]) return;
+  const order = run.task.order;
   const position = order.indexOf(index);
   if (position === -1) order.push(index);
   else order.splice(position, 1);
@@ -552,9 +660,9 @@ function selectDialogueLine(index, keyboard) {
 
 function moveDialogueLine(control, offset) {
   const beat = currentBeat();
-  if (beat.type !== 'order' || run.dialogue.solved) return;
+  if (beat.type !== 'order' || run.task.solved) return;
   const id = Number(control.closest('[data-line]').dataset.line);
-  const order = run.dialogue.order;
+  const order = run.task.order;
   const position = order.indexOf(id);
   const next = position + offset;
   if (position < 0 || next < 0 || next >= order.length) return;
@@ -569,8 +677,8 @@ function moveDialogueLine(control, offset) {
 
 function resetDialogue() {
   const beat = currentBeat();
-  if (beat.type !== 'order' || run.dialogue.solved) return;
-  run.dialogue = emptyDialogue();
+  if (beat.type !== 'order' || run.task.solved) return;
+  run.task = emptyTask(beat.id);
   save();
   const board = updateDialogue(beat);
   report('');
@@ -580,7 +688,7 @@ function resetDialogue() {
 
 function checkDialogue() {
   const beat = currentBeat();
-  const { order, solved } = run.dialogue;
+  const { order, solved } = run.task;
   if (beat.type !== 'order' || solved || order.length !== beat.lines.length) return;
   const mismatch = order.findIndex((line, index) => line !== index);
   if (mismatch !== -1) {
@@ -594,12 +702,57 @@ function checkDialogue() {
     report('Check line ' + (mismatch + 1) + '. ' + beat.lines[mismatch].hint);
     return;
   }
-  run.dialogue.solved = true;
+  run.task.solved = true;
   save();
   updateDialogue(beat).scrollTop = 0;
   main.querySelector('#dialogue-help').hidden = true;
-  report('Dialogue complete. You can go to the station.', true);
+  report('That’s the right order.', true);
   main.querySelector('#dialogue-buttons [data-action="next"]').focus({ preventScroll: true });
+}
+
+function updateTiles(beat) {
+  main.querySelector('#spoken').innerHTML = formattedLine(beat.text, tileGuess(beat));
+  main.querySelector('#tile-help').hidden = run.task.solved;
+  main.querySelector('.tile-task').classList.toggle('tile-solved', run.task.solved);
+  const controls = main.querySelector('#tile-controls');
+  controls.innerHTML = tileCards(beat);
+  return controls;
+}
+
+function pickTile(index, keyboard) {
+  const beat = currentBeat();
+  if (beat.type !== 'tiles' || run.task.solved || beat.tokens[index] === undefined) return;
+  const order = run.task.order;
+  const position = order.indexOf(index);
+  if (position === -1) order.push(index);
+  else order.splice(position, 1);
+  save();
+  report('');
+  const controls = updateTiles(beat);
+  if (keyboard) controls.querySelector('[data-value="' + index + '"]').focus();
+}
+
+function checkTiles() {
+  const beat = currentBeat();
+  if (beat.type !== 'tiles' || run.task.solved || run.task.order.length !== taskSize(beat)) return;
+  if (!matchesTask(beat, run.task.order)) {
+    const hint = beat.letters ? 'The first word has four letters. It starts with “p”.' : 'Start with “' + beat.tokens[0] + '”.';
+    report('Try again. ' + hint);
+    return;
+  }
+  run.task.solved = true;
+  save();
+  updateTiles(beat).querySelector('[data-action="next"]').focus({ preventScroll: true });
+  report('Correct!', true);
+}
+
+function resetTiles() {
+  const beat = currentBeat();
+  if (beat.type !== 'tiles' || run.task.solved) return;
+  run.task = emptyTask(beat.id);
+  save();
+  report('');
+  updateTiles(beat).querySelector('.tile').focus();
 }
 
 function advance() {
@@ -646,8 +799,7 @@ function choose(control, value, map = false) {
   if (!map && beat.text.includes('{}')) {
     main.querySelector('#spoken').innerHTML = formattedLine(beat.text, beat.options[value]);
   }
-  if (beat.routes === true) report('The bus gets you there around 9.50. The ranger is waiting at ten.', true);
-  else if (beat.routes) report('You’ll reach the centre at about 9.54.', true);
+  if (beat.routes) report('The bus gets you there around 9.50. The ranger is waiting at ten.', true);
   const driveTime = moveBus(beat);
   pending = window.setTimeout(advance, !motion ? 160 : driveTime || (beat.routes ? 970 : 540));
 }
@@ -673,7 +825,7 @@ function navigateChapter(index) {
   run.chapter = index;
   run.index = 0;
   run.found = { friends: [], litter: [] };
-  run.dialogue = emptyDialogue();
+  run.task = emptyTask();
   run.supplies = index > cafeChapter;
   screen = 'quest';
   save();
@@ -686,10 +838,15 @@ function updateMotion(active) {
   const control = document.querySelector('[data-action="motion"]');
   control.textContent = motion ? 'Pause motion' : 'Play motion';
   control.setAttribute('aria-pressed', String(!motion));
+  const film = main.querySelector('.scene-video');
   if (!motion) {
     finishPickup();
+    film?.pause();
+    main.querySelector('.film-playing')?.classList.remove('film-playing');
     main.querySelector('.play-next')?.removeAttribute('disabled');
     main.querySelector('.road-bus')?.getAnimations().forEach(animation => animation.finish());
+  } else if (film && !film.ended) {
+    film.play().catch(() => {});
   }
 }
 
@@ -697,24 +854,25 @@ function fillKey() {
   const notes = [
     'Learners can reopen the notice during the quest.',
     'Walking from the station would take until 10.10. The 9.30 bus was due at the centre at about 9.50.',
-    'Take the diversion, go straight at the first lights, then turn left into Station Road at the lights after the supermarket.',
-    'At the railway station, find the three friends. Compare wear a helmet while cycling with carry a helmet in your hand.',
-    'Follow each sign in its street scene. Take the right fork into Beech Street and stay on the main road when the side street is blocked.',
-    'Collect the gloves and bags. Walk from the café with the adults at 9.46 and reach the centre at about 9.54.',
-    'Pavement, zebra crossing, rescue centre, then the path to the beach. Send the bus driver the parking information.',
+    'Wear your seat belts. Turn left into Harbour Street. Go straight on at the first lights, then turn left into Station Road after the supermarket.',
+    'Watch each journey. Nina gets off the train. Max rides on the cycle lane and wears a bike helmet. Alex stops, looks both ways, then crosses when it’s safe.',
+    'Put the letters of push others in order. At the fork, keep right for Beech Street. Get off and wait on the pavement after the bus stops.',
+    'Ask the passer-by about Pine Café. Pick up the gloves and bags, then ask the owner for directions. Leave at 9.46 and reach the centre at about 9.54.',
+    'Walk on the pavement, cross at the zebra crossing, then meet the ranger at the rescue centre.',
     'Pick up the bottle with gloves on. Tell the ranger about the bag behind the rope.',
   ];
   document.querySelector('#teacher-content').innerHTML = '<p>British English · A2–A2+. Ask learners to say each answer aloud before clicking, especially in the dialogues and at the road signs.</p>'
     + chapters.map((chapter, index) => {
       const steps = chapter.steps.flatMap(beat => beat.type === 'search' ? collections[beat.collection].flatMap(item => item.prompts) : [beat]);
-      const entries = steps.filter(beat => ['pick', 'find', 'order'].includes(beat.type)).map(beat => {
+      const entries = steps.filter(beat => ['pick', 'find', 'order', 'input', 'select', 'tiles'].includes(beat.type)).map(beat => {
         if (beat.type === 'order') {
-          return '<li>Dialogue in order<ol>' + beat.lines.map(line => '<li><strong>' + escape(line.speaker)
-            + '</strong> · ' + escape(line.text) + '</li>').join('') + '</ol></li>';
+          return '<li>' + escape(beat.text) + '<ol>' + beat.lines.map(line => '<li>'
+            + (line.speaker ? '<strong>' + escape(line.speaker) + '</strong> · ' : '')
+            + escape(line.text) + '</li>').join('') + '</ol></li>';
         }
-        const answer = beat.options?.[beat.answer] ?? beat.spots[beat.answer].label;
+        const answer = beat.type === 'tiles' ? beat.answer : beat.options?.[beat.answer] ?? beat.spots[beat.answer].label;
         const response = beat.text.includes('{}') ? beat.text.replace('{}', answer) : answer;
-        return '<li>' + escape(response) + '</li>';
+        return '<li>' + (beat.type === 'tiles' ? '<strong>' + escape(beat.speaker) + '</strong> · ' : '') + escape(response) + '</li>';
       }).join('');
       return '<details><summary>' + escape(chapter.name) + '</summary><p>' + escape(notes[index]) + '</p><ol>' + entries + '</ol></details>';
     }).join('');
@@ -755,6 +913,15 @@ document.addEventListener('click', event => {
       break;
     case 'dialogue-check':
       checkDialogue();
+      break;
+    case 'tile':
+      pickTile(value, event.detail === 0);
+      break;
+    case 'tile-check':
+      checkTiles();
+      break;
+    case 'tile-reset':
+      resetTiles();
       break;
     case 'spot':
       choose(control, value, true);
@@ -803,6 +970,24 @@ document.addEventListener('click', event => {
     case 'motion':
       updateMotion(!motion);
       break;
+  }
+});
+
+main.addEventListener('change', event => {
+  if (event.target.id === 'word-select') choose(event.target, Number(event.target.value));
+});
+
+main.addEventListener('submit', event => {
+  if (event.target.id !== 'word-form') return;
+  event.preventDefault();
+  const beat = currentBeat();
+  const input = event.target.elements.word;
+  if (input.value.trim().toLowerCase() === beat.options[beat.answer]) {
+    choose(input, beat.answer);
+  } else {
+    input.classList.add('is-wrong');
+    input.focus();
+    report(beat.hint);
   }
 });
 

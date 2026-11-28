@@ -202,6 +202,14 @@ main { padding: 0 0 1rem; }
 .landscape { height: 100%; width: 100%; max-width: none; object-fit: cover; object-position: center 55%; animation: reveal .45s ease both; }
 .scene-town .landscape { object-position: left center; }
 .scene-phone .landscape, .scene-boarding .landscape, .scene-ready .landscape { object-position: center 54%; }
+.scene-centre .view { container-type: size; }
+.scene-centre .landscape { object-position: center bottom; }
+.scene-centre .hotspots {
+  inset: auto auto 0 50%;
+  width: max(100cqw, 177.778cqh);
+  height: max(100cqh, 56.25cqw);
+  transform: translateX(-50%);
+}
 .scene-cleanup .landscape { object-position: center 60%; }
 .scene-dusk .landscape { object-position: 72% center; }
 .scene-light {
@@ -250,33 +258,24 @@ main { padding: 0 0 1rem; }
   transform-origin: bottom;
   filter: drop-shadow(3px 8px 10px #09232271);
   transition: filter .22s ease, transform .22s ease, left .7s ease, bottom .7s ease, height .7s ease;
-  animation: actor-in .5s ease-out both;
   pointer-events: none;
 }
 .actor-mia { left: 9%; }
 .actor-leo { left: 27%; height: 58%; }
 .scene-town .actor-mia { left: 29%; height: 64%; }
 .scene-town .actor-leo { left: 43%; height: 60%; }
-.scene-station .actor-nina { left: 16.5%; bottom: 16%; height: 46%; }
-.scene-station .actor-max { left: 29.5%; bottom: 15%; height: 49%; }
-.scene-station .actor-alex { left: 42.5%; bottom: 16%; height: 45%; }
-.scene-station .actor-mia { left: 4%; bottom: 5%; height: 42%; }
-.scene-station .actor-leo { left: 49.5%; bottom: 4.2%; height: 38%; }
+.scene-station .actor { bottom: 8%; height: 52%; }
+.scene-station .actor-mia { left: 15%; height: 53%; }
+.scene-station .actor-leo { left: 23.4%; }
+.scene-station .actor-nina { left: 31.2%; bottom: 9%; height: 51%; }
+.scene-station .actor-max { left: 39%; bottom: 10%; height: 54%; }
+.scene-station .actor-alex { left: 47%; bottom: 9%; }
 .actor.speaking { filter: drop-shadow(0 0 7px #f4d9986f) drop-shadow(2px 7px 9px #082122a0); transform: scale(1.021); }
-.scene-cafe .actor-leo { left: 10%; height: 60%; }
-.scene-centre .actor { left: 7%; height: 47%; }
-.scene-centre .actor-leo { left: 21%; height: 44%; }
-.crossing-1 .actor-mia { left: 19%; }
-.crossing-1 .actor-leo { left: 30%; }
-.crossing-2 .actor-mia { left: 33%; bottom: 27%; height: 32%; }
-.crossing-2 .actor-leo { left: 40%; bottom: 26%; height: 30%; }
-.crossing-3 .actor-mia { left: 42%; bottom: 42%; height: 23%; }
-.crossing-3 .actor-leo { left: 48%; bottom: 42%; height: 21%; }
+.scene-cafe .actor-mia { left: 16%; height: 48%; }
+.scene-cafe .actor-leo { left: 26%; height: 46%; }
 .scene-cleanup .actor-mia { left: 6%; height: 48%; }
 .searching-bottle .actor-mia { left: 23%; bottom: 13%; }
 .searching-bag .actor-mia { left: 40%; bottom: 22%; height: 39%; }
-.scene-walk .actor { animation: step-across 1.35s ease-out both; left: 12%; }
-.scene-walk .actor-leo { left: 24%; animation-delay: 80ms; }
 .notice-open .actor { opacity: .3; }
 
 .console {
@@ -384,7 +383,7 @@ main { padding: 0 0 1rem; }
 .dialogue-task .spoken { font: 700 clamp(1.4rem, 2vw, 1.85rem)/1.15 var(--serif); }
 .dialogue-help { margin-top: .38rem; color: var(--sea-glass); font-size: .91rem; }
 .dialogue-board {
-  max-height: min(42svh, 24rem);
+  max-height: min(59svh, 36rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -429,6 +428,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .dialogue-selected .line-position { background: var(--gold); color: #183736; }
 .line-content strong { display: block; color: #bfe5d5; font-size: .8rem; }
 .mum-line .line-content strong { color: var(--gold-light); }
+.dialogue-selected:not(.dialogue-editable) .dialogue-line { min-height: 42px; padding-block: .37rem; }
+.dialogue-selected:not(.dialogue-editable) .line-content strong { display: inline; margin-inline-end: .48rem; }
 .dialogue-moves { display: grid; gap: .19rem; }
 .line-arrow {
   min-width: 37px;
@@ -445,6 +446,37 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .dialogue-actions, #dialogue-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .52rem .85rem; }
 .dialogue-actions { justify-content: space-between; margin-top: .85rem; }
 #dialogue-count { color: var(--sea-glass); font-size: .88rem; }
+
+.tile-help { margin: .55rem 0 .7rem; color: var(--sea-glass); font-size: .92rem; }
+.tile-row { display: flex; flex-wrap: wrap; gap: .38rem; }
+.tile-answer { min-height: 45px; margin-bottom: .58rem; padding-bottom: .58rem; border-bottom: 1px solid var(--edge); }
+.tile {
+  min-width: 40px;
+  min-height: 42px;
+  padding: .42rem .56rem;
+  border: 1px solid #8eb6a6;
+  border-radius: 7px;
+  background: #254941;
+  color: var(--paper);
+  font-weight: 700;
+}
+.tile:hover { border-color: var(--gold-light); background: #375e52; }
+.tile-selected { color: #163531; background: var(--gold); border-color: var(--gold-light); }
+.tile-selected:hover { background: var(--gold-light); }
+.tile-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; margin-top: .85rem; }
+.tile-actions .text-button:disabled { opacity: .46; }
+.tile-task:not(.tile-solved) .word-filled { color: var(--gold-light); background: #35534a; }
+.tile-task #tile-controls > .primary { margin-top: .85rem; }
+#word-select, #word-input {
+  padding: .34em .52em;
+  border: 1px solid #8ab8a7;
+  border-radius: 6px;
+  background: #244b43;
+  color: var(--paper);
+  font: inherit;
+}
+#word-input { width: min(100%, 8rem); }
+#word-select.is-wrong, #word-input.is-wrong { border-color: #f3b49d; }
 
 #notice-panel { grid-column: 1; width: 100%; z-index: 1; }
 #notice-panel:empty { display: none; }
@@ -607,6 +639,26 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   transform: translate(-50%, -50%);
 }
 .road-image { width: 100%; height: 100%; max-width: none; object-fit: fill; animation: reveal .34s ease both; }
+.journey-world { background: #12383a; }
+.journey-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.film-playing .console { visibility: hidden; }
+.motion-off .scene-video { display: none; }
+.scene-ride .landscape { object-position: center 34%; }
+.scene-tyre .road-plane { width: min(100cqw, 177.778cqh); height: min(100cqh, 56.25cqw); }
+.scene-tyre .console { grid-column: 1; max-width: 34rem; }
+.flat-bus {
+  left: 88.3%;
+  top: 92%;
+  width: clamp(50px, 15.5cqw, 235px);
+  transform: translate(-50%, -100%);
+}
+.flat-bus img { animation: flat-tyre .65s ease-out both; transform-origin: 60% 100%; }
+@keyframes flat-tyre {
+  0% { transform: rotate(-2deg); }
+  40% { transform: rotate(3deg) translateY(2%); }
+  100% { transform: rotate(1.5deg) scaleY(.97); }
+}
+.scene-tyre .burst-call { left: 81%; bottom: 24%; }
 .railway-name {
   position: absolute;
   left: 64.7%;
@@ -676,19 +728,30 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .car-walker {
   position: absolute;
   z-index: 1;
-  height: 43%;
+  height: 53%;
   aspect-ratio: 3 / 4;
   transform-origin: center bottom;
   animation: walk-to-car var(--walk-time) linear var(--walk-delay) both;
 }
-.car-walker-mia { --walk-time: 2.98s; --walk-delay: 0s; --walk-x: 18%; --walk-y: 90%; }
+.car-walker-mia {
+  --walk-time: 2.1s;
+  --walk-delay: 0s;
+  --walk-x: 19%;
+  --walk-y: 90%;
+  --door-x: 48%;
+  --door-y: 74%;
+  --door-scale: .89;
+}
 .car-walker-leo {
-  --walk-time: 3.58s;
-  --walk-delay: .22s;
-  --walk-x: 7%;
+  --walk-time: 2.36s;
+  --walk-delay: .14s;
+  --walk-x: 8.5%;
   --walk-y: 92%;
   --walk-row: 100%;
-  height: 41%;
+  --door-x: 44%;
+  --door-y: 81%;
+  --door-scale: .95;
+  height: 50%;
 }
 .car-walker::before {
   content: '';
@@ -724,10 +787,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 @keyframes show-step-in { 0%, 70% { opacity: 0; } 75%, 100% { opacity: 1; } }
 @keyframes walk-to-car {
   0% { left: var(--walk-x); top: var(--walk-y); transform: translate(-50%, -100%) scale(1.04); }
-  72% { left: 42.4%; top: 85%; transform: translate(-50%, -100%) scale(.96); }
-  84% { left: 45.2%; top: 79.2%; transform: translate(-50%, -100%) scale(.87); }
-  94% { left: 49%; top: 73.1%; transform: translate(-50%, -100%) scale(.77); opacity: 1; }
-  100% { left: 53%; top: 72%; transform: translate(-50%, -100%) scale(.58); opacity: 0; }
+  72% { left: calc(var(--door-x) - 6%); top: 85%; transform: translate(-50%, -100%); }
+  100% { left: var(--door-x); top: var(--door-y); transform: translate(-50%, -100%) scale(var(--door-scale)); }
 }
 
 .road-bus {
@@ -861,7 +922,6 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
 .effect-burst .console, .effect-hatch .console { animation: dialogue-in .4s .94s both; }
 
 @keyframes reveal { from { opacity: .28; } to { opacity: 1; } }
-@keyframes actor-in { from { opacity: 0; translate: -16px 1px; } to { opacity: 1; translate: 0 0; } }
 @keyframes discovery { from { transform: scale(1.075) translateX(1%); } to { transform: scale(1); } }
 @keyframes beacon { 0%,58%,100% { box-shadow: 0 0 0 5px #244a448b, 0 4px 10px #0b2527ad; } 75% { box-shadow: 0 0 0 9px #ffe1a64a, 0 4px 11px #0b2527ad; } }
 @keyframes road-loop { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -951,8 +1011,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
     height: clamp(255px, 43svh, 470px);
     background: #123737;
   }
-  .has-road, .scene-station, .scene-car, .dialogue-stage { --location-strip: 3.1rem; }
-  .game-stage:is(.has-road, .scene-car, .dialogue-stage) .view { height: calc((100vw - 1rem - 2px) * .5625 + var(--location-strip)); }
+  .has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre { --location-strip: 3.1rem; }
+  .game-stage:is(.has-road, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .view { height: calc((100vw - 1rem - 2px) * .5625 + var(--location-strip)); }
   .game-stage.scene-station .view { height: calc(max(214px, (100vw - 1rem - 2px) * .625) + var(--location-strip)); }
   #notice-panel { padding: .8rem; }
   .console { border-radius: 0; border: 0; border-top: 1px solid #8ecab275; box-shadow: none; }
@@ -960,11 +1020,14 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   .location { padding: .46rem .66rem .59rem; max-width: 90%; }
   .scene-time { font-size: .78rem; }
   .kit { top: auto; bottom: .7rem; right: .67rem; font-size: .75rem; }
+  .scene-centre .kit { top: calc(var(--location-strip) + .4rem); bottom: auto; }
+  .scene-centre .hotspots { inset: var(--location-strip) 0 0; width: auto; height: auto; transform: none; }
   .phone-head { border-radius: 0; }
   .chat-history { max-height: 7.4rem; }
   .dialogue-stage .world-back { right: 0; mask-image: none; }
   .dialogue-board { max-height: none; overflow: visible; padding-inline: 0; }
   .line-arrow { min-width: 44px; min-height: 36px; }
+  .film-playing .console { display: none; }
   .front-cover { min-height: clamp(525px, 78vh, 670px); align-items: end; border-radius: 12px; }
   .front-cover::before { background: linear-gradient(0deg, #08292bfa 3%, #08292be3 37%, #08292b26 70%, transparent); }
   .cover-copy { width: 100%; }
@@ -975,14 +1038,14 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   .actor-leo { left: 41%; height: 61%; }
   .scene-town .actor-mia { left: 35%; }
   .scene-town .actor-leo { left: 64%; }
-  .scene-station .actor-nina { left: 12%; }
-  .scene-station .actor-max { left: 39%; }
-  .scene-station .actor-alex { left: 67%; }
-  .scene-station .actor-mia { left: 1%; height: 34%; }
-  .scene-station .actor-leo { left: 81%; height: 33%; }
-  .scene-station .friend-nina { left: 20%; }
-  .scene-station .friend-max { left: 47%; }
-  .scene-station .friend-alex { left: 75%; }
+  .scene-station .actor-mia { left: 22%; }
+  .scene-station .actor-leo { left: 35%; }
+  .scene-station .actor-nina { left: 48%; }
+  .scene-station .actor-max { left: 61%; }
+  .scene-station .actor-alex { left: 75%; }
+  .scene-station .friend-nina { left: 55%; }
+  .scene-station .friend-max { left: 68%; }
+  .scene-station .friend-alex { left: 82%; }
   .scene-station .hotspot {
     top: auto;
     bottom: 4%;
@@ -994,17 +1057,13 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
   }
   .scene-station .hotspot-pin, .scene-station .spot-shortcuts { display: none; }
   .scene-station .hotspot-name { min-width: 44px; }
-  .scene-cafe .actor-leo { left: 19%; }
-  .scene-centre .actor, .scene-cleanup .actor-mia { left: 6%; }
-  .scene-centre .actor-leo { left: 21%; }
+  .scene-cafe .actor-mia { left: 9%; }
+  .scene-cafe .actor-leo { left: 23%; }
+  .scene-cleanup .actor-mia { left: 6%; }
   .searching-bottle .actor-mia { left: 23%; }
   .searching-bag .actor-mia { left: 40%; }
-  .crossing-1 .actor-mia { left: 21%; }
-  .crossing-1 .actor-leo { left: 35%; }
-  .crossing-2 .actor-mia, .crossing-3 .actor-mia { left: 37%; }
-  .crossing-2 .actor-leo, .crossing-3 .actor-leo { left: 53%; }
-  .has-road .road-world, :is(.scene-station, .scene-car, .dialogue-stage) .world-back, .scene-station .hotspots { top: var(--location-strip); }
-  :is(.has-road, .scene-station, .scene-car, .dialogue-stage) .location {
+  .has-road .road-world, :is(.scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .world-back, .scene-station .hotspots { top: var(--location-strip); }
+  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .location {
     inset: 0 0 auto;
     display: flex;
     align-items: center;
@@ -1016,8 +1075,8 @@ button.dialogue-line:hover { background: #3a6356; border-color: #c4dfc4; }
     border: 0;
     border-radius: 0;
   }
-  :is(.has-road, .scene-station, .scene-car, .dialogue-stage) .scene-time { white-space: nowrap; }
-  :is(.has-road, .scene-station, .scene-car, .dialogue-stage) .location h1 { margin: 0; font-size: clamp(1.05rem, 4.4vw, 1.85rem); }
+  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .scene-time { white-space: nowrap; }
+  :is(.has-road, .scene-station, .scene-car, .dialogue-stage, .journey-stage, .scene-tyre, .scene-centre) .location h1 { margin: 0; font-size: clamp(1.05rem, 4.4vw, 1.85rem); }
   .hotspot-pin { height: 39px; width: 39px; }
   .hotspot-name { padding: .23rem .4rem; font-size: .71rem; }
   .hotspot-pin > i { width: 11px; height: 11px; }
